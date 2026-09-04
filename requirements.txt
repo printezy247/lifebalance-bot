@@ -1,7 +1,12 @@
-python-telegram-bot[job-queue]==20.7
-python-dotenv==1.0.0
-requests==2.31.0
-python-dateutil==2.9.0.post0
-httpcore<1.0.0
-httpx<0.27.0
-anyio<4.0.0
+# Do NOT pin httpx / httpcore / anyio here.
+# python-telegram-bot pins its own compatible versions of those, and adding
+# manual pins caused an unresolvable conflict that broke the Railway build
+# (httpcore<1.0.0 vs httpx 0.25.2 requiring httpcore==1.*).
+#
+# Python version is pinned in .python-version — leaving it unpinned let the
+# Railway builder drift to 3.13, which PTB 20.7 / APScheduler 3.10.4 predate.
+
+python-telegram-bot[job-queue]>=21.6,<22
+python-dotenv>=1.0,<2
+requests>=2.32,<3
+python-dateutil>=2.9,<3
