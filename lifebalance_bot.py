@@ -74,6 +74,23 @@ SNOOZE_MINUTES = 30
 REMINDER_LEAD_MINUTES = 10
 MAX_BUTTON_LABEL = 32
 
+
+def _env_int(name, default, low, high):
+    """Read an int env var, clamped, falling back on anything unparseable."""
+    try:
+        return max(low, min(high, int(os.getenv(name, str(default)))))
+    except (TypeError, ValueError):
+        print(f"[warn] {name} is not a number, using {default}.")
+        return default
+
+
+# Weekly digest schedule. PTB maps days 0-6 to sunday-saturday (it was
+# monday-sunday before v20), so 0 really is Sunday here.
+DIGEST_ENABLED = os.getenv("DIGEST_ENABLED", "1") not in ("0", "false", "False")
+DIGEST_DAY = _env_int("DIGEST_DAY", 0, 0, 6)
+DIGEST_HOUR = _env_int("DIGEST_HOUR", 19, 0, 23)
+DAY_NAMES = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+
 # --------------------------------------------------------------------------
 # TIME HELPERS
 # --------------------------------------------------------------------------
@@ -1266,6 +1283,105 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
         save_data(data)
 
 
+def digest_content(user):
+    """Weekly stats plus a reflection prompt. Returns (html, markup)."""
+    text, _ = week_view(user)
+    domain = random.choice(list(REFLECTION_PROMPTS))
+    prompt = random.choice(REFLECTION_PROMPTS[domain])
+
+    body = (
+        f"{text}\n\n"
+        "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+        f"\U0001F33F <b>Weekly reflection</b>\n\n"
+        f"<i>{escape(prompt)}</i>\n\n"
+        "Reply with your thoughts, or pick another area:"
+    )
+
+    markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("\U0001F46A Family", callback_data="rf:family"),
+            InlineKeyboardButton("\U0001F4B9 Trading", callback_data="rf:trading"),
+        ],
+        [
+            InlineKeyboardButton("\U0001F4E3 Marketing", callback_data="rf:marketing"),
+            InlineKeyboardButton("\u2696\uFE0F Balance", callback_data="rf:balance"),
+        ],
+        [InlineKeyboardButton("\U0001F4C5 Plan tomorrow", callback_data="nav:today")],
+    ])
+    return body, markup
+
+
+async def weekly_digest(context: ContextTypes.DEFAULT_TYPE):
+    """Proactively send each user their week plus a reflection prompt.
+
+    Runs on DIGEST_DAY at DIGEST_HOUR in BOT_TZ. Guarded by an ISO-week
+    stamp so a restart cannot double-send.
+    """
+    data = load_data()
+    this_week = now().isocalendar()[:2]
+    sent = 0
+    dirty = False
+
+    for user_id in list(data.keys()):
+        user = ensure_user(data, user_id)
+
+        stamp = user.get("last_digest")
+        if stamp:
+            try:
+                if parse_dt(stamp).isocalendar()[:2] == this_week:
+                    continue
+            except ValueError:
+                pass
+
+        # Skip users with nothing to report; an empty digest is just noise.
+        if not user["tasks"]:
+            continue
+
+        body, markup = digest_content(user)
+
+        try:
+            await context.bot.send_message(
+                chat_id=int(user_id),
+                text=body,
+                reply_markup=markup,
+                parse_mode="HTML",
+            )
+            user["last_digest"] = now().isoformat()
+            dirty = True
+            sent += 1
+        except Exception as exc:
+            print(f"[warn] Weekly digest to {user_id} failed: {exc}")
+
+    if dirty:
+        save_data(data)
+    print(f"[job] Weekly digest sent to {sent} user(s).")
+
+
+async def digest_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Preview the weekly digest on demand, bypassing the once-a-week guard."""
+    data = load_data()
+    user = ensure_user(data, str(update.effective_user.id))
+    save_data(data)
+
+    if not user["tasks"]:
+        await update.message.reply_html(
+            "Nothing to report yet \u2014 add a task first with "
+            "<code>/add Call mom 7pm family</code>"
+        )
+        return
+
+    body, markup = digest_content(user)
+    schedule = (
+        f"{DAY_NAMES[DIGEST_DAY]} at {DIGEST_HOUR:02d}:00 {_TZ_NAME}"
+        if DIGEST_ENABLED
+        else "disabled"
+    )
+    await update.message.reply_html(
+        f"{body}\n\n<i>Automatic delivery: {escape(schedule)}</i>",
+        reply_markup=markup,
+    )
+
+
 # --------------------------------------------------------------------------
 # STARTUP
 # --------------------------------------------------------------------------
@@ -1279,6 +1395,7 @@ async def post_init(application: Application):
         BotCommand("suggest", "AI task suggestion"),
         BotCommand("plan", "Break a goal into steps"),
         BotCommand("reflect", "Weekly reflection"),
+        BotCommand("digest", "Preview your weekly digest now"),
         BotCommand("done", "Complete a task by id"),
         BotCommand("snooze", "Delay a task 30 mins"),
         BotCommand("reschedule", "Move a task to a new time"),
@@ -1311,6 +1428,7 @@ def main():
     application.add_handler(CommandHandler("snooze", snooze_task))
     application.add_handler(CommandHandler("reschedule", reschedule_task))
     application.add_handler(CommandHandler("reflect", weekly_reflect))
+    application.add_handler(CommandHandler("digest", digest_now))
     application.add_handler(CommandHandler(["suggest", "ai_suggest"], ai_suggest))
     application.add_handler(CommandHandler("plan", plan_goal))
     application.add_handler(CommandHandler("assist", assist_task))
@@ -1319,6 +1437,21 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
     application.job_queue.run_repeating(check_reminders, interval=60, first=10)
+
+    if DIGEST_ENABLED:
+        # tzinfo must be explicit: a naive time would be treated as UTC.
+        application.job_queue.run_daily(
+            weekly_digest,
+            time=datetime.time(hour=DIGEST_HOUR, minute=0, tzinfo=TZ),
+            days=(DIGEST_DAY,),
+            name="weekly_digest",
+        )
+        print(
+            f"[init] Weekly digest scheduled for {DAY_NAMES[DIGEST_DAY]} "
+            f"{DIGEST_HOUR:02d}:00 {_TZ_NAME}"
+        )
+    else:
+        print("[init] Weekly digest disabled (DIGEST_ENABLED=0)")
 
     # Keep startup logs ASCII: a non-UTF8 stdout would crash on emoji.
     print(f"[init] LifeBalance Bot running (tz={_TZ_NAME}, data={DATA_FILE})")
