@@ -51,7 +51,7 @@ Suggest ONE specific, actionable task for the next 2-4 hours that:
 Respond ONLY with the suggestion — no extra text.
     """.strip()
 
-def build_planning_prompt(goal):
+def build_planning_prompt(goal, category="general"):
     return f"""
 You are a project planning expert. Break this goal into:
 - 3-5 concrete subtasks (each < 90 mins)
@@ -59,7 +59,7 @@ You are a project planning expert. Break this goal into:
 - One potential blocker + prep step
 - How to celebrate completion
 
-Goal: "{goal}"
+Goal: "{goal}" [{category}]
 
 Format as:
 🎯 **Goal**: [goal]
@@ -112,11 +112,20 @@ async def add_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     args = context.args
     if len(args) < 2:
-        await update.message.reply_text("Usage: /add <task> <time>\nExample: /add Pick up kids 3:30pm")
+        await update.message.reply_text("Usage: /add <task> <time> [category]\nExample: /add Pick up kids 3:30pm family\nCategories: family, trading, marketing, content, learning, health, admin, general")
         return
     
-    time_str = args[-1]
-    task_text = " ".join(args[:-1])
+    # Check if last argument is a known category
+    known_categories = ["family", "trading", "marketing", "content", "learning", "health", "admin", "general"]
+    category = "general"  # default
+    
+    if len(args) >= 3 and args[-1].lower() in known_categories:
+        category = args[-1].lower()
+        time_str = args[-2]
+        task_text = " ".join(args[:-2])
+    else:
+        time_str = args[-1]
+        task_text = " ".join(args[:-1])
     
     try:
         now = datetime.datetime.now()
@@ -143,10 +152,11 @@ async def add_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "text": task_text,
         "time": target.isoformat(),
         "done": False,
-        "created": datetime.datetime.now().isoformat()
+        "created": datetime.datetime.now().isoformat(),
+        "category": category
     }
     data[user_id]["tasks"].append(new_task)
-    
+
     reminder_time = target - datetime.timedelta(minutes=10)
     if reminder_time > datetime.datetime.now():
         data[user_id]["reminders"].append({
@@ -157,40 +167,42 @@ async def add_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     save_data(data)
     await update.message.reply_text(
-        f"✅ Added: \"{task_text}\" at {target.strftime('%I:%M %p')}\n"
+        f"✅ Added: \"{task_text}\" [{category}] at {target.strftime('%I:%M %p')}\n"
         f"I’ll remind you 10 mins before! 🕒\n"
         f"Tip: Use /done {task_id} when finished."
     )
 
+
+
 async def show_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     data = load_data()
-    if user_id not in data or not data[user_id]["tasks"]:
-        await update.message.reply_text("Your plate is clean! 🍽️ Add something with /add")
-        return
-    
+    if user_id not in data:
+        data[user_id] = {"tasks": [], "reminders": []}
+
     now = datetime.datetime.now()
+    today = now.date()
     today_tasks = []
-    for t in data[user_id]["tasks"]:
-        t_time = datetime.datetime.fromisoformat(t["time"])
-        if t_time.date() == now.date() and not t["done"]:
-            today_tasks.append((t, t_time))
-    
+    for task in data[user_id]["tasks"]:
+        try:
+            task_time = datetime.datetime.fromisoformat(task["time"])
+            if task_time.date() == today:
+                today_tasks.append((task, task_time))
+        except:
+            pass
+
     if not today_tasks:
         await update.message.reply_text("No tasks for today! Enjoy the freedom. 🌸")
         return
-    
+
     today_tasks.sort(key=lambda x: x[1])
-    msg = "📅 <b>Your Today</b> (Work + Life):\n\n"
+    msg = "📅 <b>Your Today</b> (Work + Live):\n\n"
     for task, t_time in today_tasks:
         status = "✅" if task["done"] else "⏳"
         time_str = t_time.strftime("%I:%M %p")
-        msg += f"{status} <b>{time_str}</b> — {task['text']}\n"
-        if not task["done"]:
-            msg += f"   → /done {task['id']} | /snooze {task['id']}\n"
-    
-    await update.message.reply_html(msg)
-  async def complete_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        msg += f"{status} <b>{time_str}</b> — {task['text']} [{task.get('category', 'general')}]\n"
+
+async def complete_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     data = load_data()
     if user_id not in data:
@@ -218,17 +230,16 @@ async def show_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_data(data)
     
     await update.message.reply_text(
-        f"🎉 Completed: \"{task['text']}\"! \n\n"
+        f"🎉 Completed: \"{task['text']}! \n\n"
         f"Quick reflection (reply with 1-5 or skip):\n"
-        "1. How energizing was this? (1=draining, 5=energizing)\n"
-        "2. One thing that helped/hindered? (Optional)\n\n"
-        "Example reply: \"4\\nHelped: Listened to music\"\n"
-        "This helps me suggest better tasks for you!",
-        parse_mode='HTML'
+        f"1. How energizing was this? (1=draining, 5=energizing)\n"
+        f"2. One thing that helped/hindered? (Optional)\n\n"
+        f'Example reply: "4\nHelped: Listened to music"\n\n'
+        f"This helps me suggest better tasks for you!",
+        parse_mode="HTML"
     )
     
     context.user_data["awaiting_reflection"] = task_id
-
 async def snooze_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     data = load_data()
@@ -266,28 +277,130 @@ async def weekly_reflect(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     data = load_data()
     if user_id not in data:
-        data[user_id] = {"tasks": [], "reflections": []}
+        data[user_id] = {"tasks": [], "reflections": [], "weekly_plans": []}
     
-    prompts = [
-        "What’s 1 work task that drained you this week? How could you adjust it next week?",
-        "What’s 1 family/personal moment that gave you energy? How to make more space for it?",
-        "If you could delete 1 recurring task from your life, what would it be?",
-        "What’s 1 small win you’re proud of (work or personal)?"
+    # Get last week's tasks for context
+    one_week_ago = datetime.datetime.now() - datetime.timedelta(days=7)
+    recent_tasks = [t for t in data[user_id]["tasks"] 
+                   if "created" in t and 
+                   datetime.datetime.fromisoformat(t["created"]) > one_week_ago]
+    
+    completed_last_week = [t for t in recent_tasks if t.get("done", False)]
+    pending_last_week = [t for t in recent_tasks if not t.get("done", False)]
+    
+    # Domain-specific reflection prompts
+    family_prompts = [
+        "What’s 1 meaningful moment you shared with your wife or daughter this week?",
+        "How did you balance work time with family time this week? What could be better?",
+        "What’s 1 family activity you’d like to do more of next week?",
+        "Did you feel present with your family during non-work hours?"
     ]
+    
+    trading_prompts = [
+        "How many hours did you spend on trading/trading analysis this week?",
+        "What’s 1 trading lesson you learned this week?",
+        "Did you stick to your trading plan/rules this week? If not, what got in the way?",
+        "What’s 1 adjustment you’d make to your trading approach for next week?"
+    ]
+    
+    marketing_prompts = [
+        "How much time did you spend on marketing/content creation this week?",
+        "What’s 1 piece of content you created that you’re proud of?",
+        "Which marketing channel gave you the best engagement this week?",
+        "What’s 1 marketing experiment you want to try next week?"
+    ]
+    
+    balance_prompts = [
+        "On a scale of 1-10, how would you rate your work-life balance this week?",
+        "What’s 1 thing you sacrificed for work this week that you wish you hadn’t?",
+        "What’s 1 non-work activity that recharged you this week?",
+        "If you could protect 1 hour each day for non-work, what would you do with it?"
+    ]
+    
+    # Select a random prompt from all categories
+    all_prompts = family_prompts + trading_prompts + marketing_prompts + balance_prompts
     import random
-    prompt = random.choice(prompts)
+    prompt = random.choice(all_prompts)
+    
+    # Add context about last week if we have data
+    context_text = ""
+    if recent_tasks:
+        context_text = f"\n\n📊 Last Week at a Glance:\n"
+        context_text += f"  ✅ Completed: {len(completed_last_week)} tasks\n"
+        context_text += f"  ⏳ Pending: {len(pending_last_week)} tasks\n"
+        if completed_last_week:
+            # Show categories of completed tasks
+            cats = {}
+            for t in completed_last_week:
+                cat = t.get("category", "general")
+                cats[cat] = cats.get(cat, 0) + 1
+            context_text += "  By category: " + ", ".join([f"{k}: {v}" for k, v in cats.items()]) + "\n"
+    
+    # Create inline keyboard for quick reflection responses
+    keyboard = [
+        [
+            InlineKeyboardButton("📝 Quick Family Reflection", callback_data="reflect_family"),
+            InlineKeyboardButton("💹 Quick Trading Reflection", callback_data="reflect_trading")
+        ],
+        [
+            InlineKeyboardButton("📢 Quick Marketing Reflection", callback_data="reflect_marketing"),
+            InlineKeyboardButton("⚖️ Quick Balance Reflection", callback_data="reflect_balance")
+        ],
+        [
+            InlineKeyboardButton("📊 View Weekly Dashboard", callback_data="weekly_dashboard"),
+            InlineKeyboardButton("📋 Skip Reflection", callback_data="reflect_skip")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        f"🌿 <b>Weekly Reflection</b> (No pressure — just honesty):\n\n"
-        f"<i>{prompt}</i>\n\n"
-        f"Reply to this message with your thoughts — I’ll save them privately. "
-        f"Or just /skip if you’d rather not.\n\n"
-        f"💡 Why this works: Reflecting prevents burnout by aligning your time with what *truly* matters.",
+        f"🌿 <b>Weekly Reflection</b> (Your Plan-Do-Review Checkpoint):\n\n"
+        f"<i>{prompt}</i>"
+        f"{context_text}\n\n"
+        f"Choose a quick reflection or reply with your thoughts:\n\n"
+        f"💡 Tip: Regular reflection helps you align your time with what truly matters.",
+        reply_markup=reply_markup,
         parse_mode='HTML'
     )
     
     data[user_id]["last_reflect"] = datetime.datetime.now().isoformat()
     save_data(data)
+async def plan_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    data = load_data()
+    if user_id not in data:
+        data[user_id] = {"tasks": [], "reminders": []}
+
+    args = context.args
+    if len(args) < 1:
+        await update.message.reply_text("Usage: /plan [your goal] [category]\nExample: /plan Prepare quarterly presentation family\nCategories: family, trading, marketing, content, learning, health, admin, general")
+        return
+
+    # Check if last argument is a known category
+    known_categories = ["family", "trading", "marketing", "content", "learning", "health", "admin", "general"]
+    category = "general"  # default
+
+    if len(args) >= 2 and args[-1].lower() in known_categories:
+        category = args[-1].lower()
+        goal = " ".join(args[:-1])
+    else:
+        goal = " ".join(args)
+
+    prompt = build_planning_prompt(goal, category)
+
+    try:
+        output = query_hf_model({"inputs": prompt, "parameters": {"max_new_tokens": 200}})
+        plan = output[0]["generated_text"] if isinstance(output, list) else output.get("generated_text", "Planning failed...")
+    except Exception as e:
+        plan = f"Planning error: {str(e)}"
+
+    await update.message.reply_text(
+        f"🧠 <b>AI Plan for: \"{goal}\" [{category}]</b>\n\n{plan}\n\n"
+        f"Next steps:\n"
+        f"• Pick a subtask → /add \"[subtask]\" [time] [category]\n"
+        f"• Need adjustments? Reply with what to change!",
+        parse_mode='HTML'
+    )
 
 async def ai_suggest(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
@@ -319,28 +432,6 @@ async def ai_suggest(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💡 <b>AI Suggestion for You</b>:\n\n{suggestion}\n\n"
         f"Like it? Try: /add \"[your version]\" [time]\n"
         f"Want tweaks? Reply with what to adjust!",
-        parse_mode='HTML'
-    )
-
-async def plan_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Usage: /plan [your goal]\nExample: /plan Prepare quarterly presentation")
-        return
-    
-    goal = " ".join(context.args)
-    prompt = build_planning_prompt(goal)
-    
-    try:
-        output = query_hf_model({"inputs": prompt, "parameters": {"max_new_tokens": 200}})
-        plan = output[0]["generated_text"] if isinstance(output, list) else output.get("generated_text", "Planning failed...")
-    except Exception as e:
-        plan = f"Planning error: {str(e)}"
-    
-    await update.message.reply_text(
-        f"🧠 <b>AI Plan for: \"{goal}\"</b>\n\n{plan}\n\n"
-        f"Next steps:\n"
-        f"• Pick a subtask → /add \"[subtask]\" [time]\n"
-        f"• Need adjustments? Reply with what to change!",
         parse_mode='HTML'
     )
 
@@ -492,7 +583,7 @@ async def handle_reflection(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Your reflections help me suggest tasks that truly fit *you*.",
         parse_mode='HTML'
     )
-  async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = str(query.from_user.id)
