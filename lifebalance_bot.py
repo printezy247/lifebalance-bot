@@ -412,93 +412,154 @@ async def safe_edit(query, text, markup):
 # AI HELPERS
 # --------------------------------------------------------------------------
 
-HF_API_URL = "https://api-inference.huggingface.co/models/"
-HEADERS = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "nvidia/Llama3-ChatQA-1.5-8B")
+# api-inference.huggingface.co was retired and no longer has a DNS A record,
+# which surfaced as "No address associated with hostname". Hugging Face now
+# serves an OpenAI-compatible endpoint through Inference Providers. Both the
+# URL and the model are env-overridable so a future migration needs no code
+# change.
+AI_BASE_URL = os.getenv(
+    "AI_BASE_URL", "https://router.huggingface.co/v1/chat/completions"
+)
+AI_MODEL = (
+    os.getenv("AI_MODEL")
+    or os.getenv("DEFAULT_MODEL")
+    or "meta-llama/Llama-3.1-8B-Instruct"
+)
+AI_TOKEN = os.getenv("HF_TOKEN") or os.getenv("AI_TOKEN")
+AI_TIMEOUT = int(os.getenv("AI_TIMEOUT", "45"))
 
 
-def _query_hf_blocking(payload, model):
-    response = requests.post(
-        f"{HF_API_URL}{model}", headers=HEADERS, json=payload, timeout=30
-    )
-    response.raise_for_status()
-    return response.json()
+class AIError(RuntimeError):
+    """An AI call failed in a way worth showing the user verbatim."""
 
 
-async def query_hf_model(payload, model=None):
-    """Run the blocking HTTP call off the event loop.
-
-    Calling requests.post directly inside an async handler froze the whole
-    bot for the duration of every AI request.
-    """
-    model = model or DEFAULT_MODEL
-    return await asyncio.to_thread(_query_hf_blocking, payload, model)
-
-
-def _extract_text(output, fallback):
-    if isinstance(output, list) and output:
-        first = output[0]
-        if isinstance(first, dict):
-            return first.get("generated_text") or fallback
-    if isinstance(output, dict):
-        if "error" in output:
-            return f"Model error: {output['error']}"
-        return output.get("generated_text") or fallback
-    return fallback
-
-
-async def ask_ai(prompt, max_tokens, fallback):
-    if not os.getenv("HF_TOKEN"):
-        return "AI is not configured \u2014 set HF_TOKEN in Railway variables."
+def _describe_http_error(response):
+    detail = ""
     try:
-        output = await query_hf_model(
-            {"inputs": prompt, "parameters": {"max_new_tokens": max_tokens}}
+        body = response.json()
+        error = body.get("error")
+        if isinstance(error, dict):
+            detail = error.get("message", "")
+        elif isinstance(error, str):
+            detail = error
+    except ValueError:
+        detail = (response.text or "")[:200]
+
+    code = response.status_code
+    if code == 401:
+        return "the API token is missing or invalid (check HF_TOKEN)."
+    if code == 402:
+        return "the account is out of inference credits."
+    if code == 403:
+        return f"access to '{AI_MODEL}' is not permitted with this token."
+    if code == 404:
+        return (
+            f"model '{AI_MODEL}' is not served. Set AI_MODEL to a supported "
+            "one, e.g. meta-llama/Llama-3.1-8B-Instruct"
         )
-        return _extract_text(output, fallback)
+    if code == 429:
+        return "rate limited. Give it a minute."
+    return f"HTTP {code}{' - ' + detail if detail else ''}"
+
+
+def _chat_blocking(system, user, max_tokens):
+    response = requests.post(
+        AI_BASE_URL,
+        headers={
+            "Authorization": f"Bearer {AI_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": AI_MODEL,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "max_tokens": max_tokens,
+            "temperature": 0.7,
+        },
+        timeout=AI_TIMEOUT,
+    )
+
+    if response.status_code >= 400:
+        raise AIError(_describe_http_error(response))
+
+    try:
+        body = response.json()
+    except ValueError:
+        raise AIError("the response was not valid JSON.")
+
+    choices = body.get("choices") or []
+    if not choices:
+        raise AIError("the model returned no choices.")
+
+    content = ((choices[0].get("message") or {}).get("content") or "").strip()
+    if not content:
+        raise AIError("the model returned an empty message.")
+    return content
+
+
+async def ask_ai(system, user, max_tokens, fallback):
+    """Chat completion, run off the event loop.
+
+    requests.post inside an async handler froze the whole bot for the
+    duration of every AI request, so it goes through a worker thread.
+    """
+    if not AI_TOKEN:
+        return "AI is not configured \u2014 set HF_TOKEN in your Railway variables."
+    try:
+        return await asyncio.to_thread(_chat_blocking, system, user, max_tokens)
+    except AIError as exc:
+        return f"AI unavailable \u2014 {exc}"
+    except requests.exceptions.ConnectionError:
+        host = AI_BASE_URL.split("/")[2] if "//" in AI_BASE_URL else AI_BASE_URL
+        return f"Could not reach {host}. Check AI_BASE_URL."
+    except requests.exceptions.Timeout:
+        return f"The model took longer than {AI_TIMEOUT}s. Try again."
     except Exception as exc:
-        return f"AI unavailable right now ({type(exc).__name__}: {exc})."
+        return f"AI error ({type(exc).__name__}): {exc}" or fallback
+
+
+SUGGEST_SYSTEM = (
+    "You are a wise, warm life coach helping someone balance work and family. "
+    "Reply with ONE specific, actionable suggestion in 2 sentences or fewer. "
+    "No preamble, no lists, no markdown."
+)
+
+PLAN_SYSTEM = (
+    "You are a practical project planner. Break the goal into 3-5 concrete "
+    "subtasks, each under 90 minutes, each with a realistic time estimate. "
+    "Then give one likely blocker with a prep step. Be concise and practical, "
+    "not idealistic. If the goal is too big, give only the first step. "
+    "Use plain text with simple numbered lines, no markdown."
+)
+
+COACH_SYSTEM = (
+    "You are a supportive task coach. Give ONE specific, actionable tip to "
+    "help the person start or push through. Under 2 sentences. Warm and "
+    "practical. No preamble, no markdown."
+)
 
 
 def build_suggestion_prompt(ctx):
-    return f"""
-You are a wise, kind life coach helping {ctx['name']} balance work and family.
-Based on:
-- Recent tasks: {ctx['recent_tasks']}
-- Energy level (1-5): {ctx['energy']}
-- Time of day: {ctx['time_of_day']}
-- Stated priorities: {ctx['priorities']}
-
-Suggest ONE specific, actionable task for the next 2-4 hours that:
-1. Advances a meaningful goal (work OR personal)
-2. Respects their energy level (e.g. don't suggest deep work if energy=2)
-3. Includes a tiny joy element
-4. Takes < 90 mins
-5. Is phrased warmly
-
-Respond ONLY with the suggestion.
-""".strip()
+    return (
+        f"Name: {ctx['name']}\n"
+        f"Unfinished tasks: {', '.join(ctx['recent_tasks'])}\n"
+        f"Energy level (1-5): {ctx['energy']}\n"
+        f"Time of day: {ctx['time_of_day']}\n"
+        f"Priorities: {', '.join(ctx['priorities'])}\n\n"
+        "Suggest one task for the next 2-4 hours. Respect their energy level: "
+        "do not suggest deep work at low energy. Include a small element of "
+        "enjoyment. Keep it under 90 minutes."
+    )
 
 
 def build_planning_prompt(goal, category="general"):
-    return f"""
-You are a project planning expert. Break this goal into:
-- 3-5 concrete subtasks (each < 90 mins)
-- Time estimates (realistic, includes buffer)
-- One potential blocker + prep step
-- How to celebrate completion
-
-Goal: "{goal}" [{category}]
-
-Be practical, not idealistic. If the goal is too big, suggest the FIRST step only.
-""".strip()
+    return f'Goal: "{goal}"\nCategory: {category}'
 
 
 def build_coach_prompt(task_text):
-    return f"""
-You are a supportive task coach. The user is about to work on: "{task_text}"
-Give ONE specific, actionable tip to help them start or overcome a hurdle.
-Keep it under 2 sentences. Be warm and practical.
-""".strip()
+    return f'The task is: "{task_text}"'
 
 
 # --------------------------------------------------------------------------
@@ -795,7 +856,9 @@ async def ai_suggest(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "priorities": ["Work", "Family", "Health"],
     })
 
-    suggestion = await ask_ai(prompt, 150, "Couldn't generate a suggestion.")
+    suggestion = await ask_ai(
+        SUGGEST_SYSTEM, prompt, 200, "Couldn't generate a suggestion."
+    )
     await update.message.reply_html(
         f"\U0001F4A1 <b>Suggestion</b>  <i>(energy \u2248 {energy}/5)</i>\n\n"
         f"{escape(suggestion)}\n\n"
@@ -818,7 +881,9 @@ async def plan_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     goal = " ".join(tokens)
 
     await update.effective_chat.send_action(ChatAction.TYPING)
-    plan = await ask_ai(build_planning_prompt(goal, category), 250, "Planning failed.")
+    plan = await ask_ai(
+        PLAN_SYSTEM, build_planning_prompt(goal, category), 450, "Planning failed."
+    )
 
     await update.message.reply_html(
         f"\U0001F9E0 <b>Plan: {escape(goal)}</b> {cat_emoji(category)}\n\n"
@@ -844,7 +909,10 @@ async def assist_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.effective_chat.send_action(ChatAction.TYPING)
     tip = await ask_ai(
-        build_coach_prompt(task["text"]), 100, "Try breaking it into smaller steps."
+        COACH_SYSTEM,
+        build_coach_prompt(task["text"]),
+        120,
+        "Try breaking it into smaller steps.",
     )
     await update.message.reply_html(
         f"\U0001F3AF <b>Coach tip</b> \u2014 {escape(task['text'])}\n\n{escape(tip)}",
@@ -988,7 +1056,10 @@ async def _handle_task_action(query, context, data, user, parts):
     if action == "coach":
         await query.answer("Thinking\u2026")
         tip = await ask_ai(
-            build_coach_prompt(task["text"]), 100, "Try breaking it into smaller steps."
+            COACH_SYSTEM,
+            build_coach_prompt(task["text"]),
+            120,
+            "Try breaking it into smaller steps.",
         )
         await safe_edit(
             query,
