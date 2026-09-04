@@ -216,3 +216,22 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- LifeBalance Bot ---
+
+# Agent/editor working directories
+.claude/
+.opencode/
+
+# Local editor backups. The real history lives in git.
+*.backup
+*.backup[0-9]
+*.labbackup
+*.bak
+*.orig
+
+# Runtime data. In production this lives on a Railway Volume at DATA_DIR,
+# never in the repo. It contains personal task and reflection content.
+user_data.json
+user_data.json.tmp
+backups/
