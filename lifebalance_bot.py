@@ -84,12 +84,86 @@ def _env_int(name, default, low, high):
         return default
 
 
+def _env_float(name, default, low, high):
+    try:
+        return max(low, min(high, float(os.getenv(name, str(default)))))
+    except (TypeError, ValueError):
+        print(f"[warn] {name} is not a number, using {default}.")
+        return default
+
+
+def _env_bool(name, default=True):
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in ("0", "false", "no", "off", "")
+
+
+def _env_list(name, default):
+    raw = os.getenv(name)
+    if not raw:
+        return list(default)
+    return [part.strip().lower() for part in raw.split(",") if part.strip()]
+
+
 # Weekly digest schedule. PTB maps days 0-6 to sunday-saturday (it was
 # monday-sunday before v20), so 0 really is Sunday here.
-DIGEST_ENABLED = os.getenv("DIGEST_ENABLED", "1") not in ("0", "false", "False")
+DIGEST_ENABLED = _env_bool("DIGEST_ENABLED", True)
 DIGEST_DAY = _env_int("DIGEST_DAY", 0, 0, 6)
 DIGEST_HOUR = _env_int("DIGEST_HOUR", 19, 0, 23)
 DAY_NAMES = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+
+# Quiet hours gate every bot-initiated message. Task reminders you scheduled
+# yourself are deliberately exempt.
+QUIET_START = _env_int("QUIET_START", 22, 0, 23)
+QUIET_END = _env_int("QUIET_END", 7, 0, 23)
+
+BRIEFING_ENABLED = _env_bool("BRIEFING_ENABLED", True)
+BRIEFING_HOUR = _env_int("BRIEFING_HOUR", 7, 0, 23)
+
+WINDDOWN_ENABLED = _env_bool("WINDDOWN_ENABLED", True)
+WINDDOWN_HOUR = _env_int("WINDDOWN_HOUR", 21, 0, 23)
+
+NUDGE_ENABLED = _env_bool("NUDGE_ENABLED", True)
+NUDGE_AFTER_MINUTES = _env_int("NUDGE_AFTER_MINUTES", 30, 5, 720)
+
+BACKUP_ENABLED = _env_bool("BACKUP_ENABLED", True)
+BACKUP_HOUR = _env_int("BACKUP_HOUR", 3, 0, 23)
+BACKUP_KEEP = _env_int("BACKUP_KEEP", 14, 1, 365)
+
+FOCUS_DEFAULT = _env_int("FOCUS_DEFAULT", 25, 1, 480)
+FOCUS_MAX = _env_int("FOCUS_MAX", 180, 1, 480)
+
+# Insight thresholds. Each insight stays silent until it has enough data to
+# say something true, and then goes quiet for a cooldown period.
+INSIGHT_COOLDOWN_DAYS = _env_int("INSIGHT_COOLDOWN_DAYS", 7, 1, 90)
+BALANCE_WINDOW_DAYS = _env_int("BALANCE_WINDOW_DAYS", 14, 3, 90)
+BALANCE_MIN_TASKS = _env_int("BALANCE_MIN_TASKS", 8, 2, 200)
+BALANCE_THRESHOLD = _env_int("BALANCE_THRESHOLD", 60, 30, 100)
+BURNOUT_WINDOW_DAYS = _env_int("BURNOUT_WINDOW_DAYS", 7, 2, 60)
+BURNOUT_MIN_RATINGS = _env_int("BURNOUT_MIN_RATINGS", 4, 2, 50)
+BURNOUT_THRESHOLD = _env_float("BURNOUT_THRESHOLD", 2.5, 1.0, 5.0)
+NEGLECT_DAYS = _env_int("NEGLECT_DAYS", 10, 2, 120)
+NEGLECT_CATEGORIES = _env_list("NEGLECT_CATEGORIES", ("family", "health"))
+
+# Per-user overrides live in user["settings"]; these are the defaults.
+DEFAULT_SETTINGS = {
+    "quiet_start": QUIET_START,
+    "quiet_end": QUIET_END,
+    "briefing": BRIEFING_ENABLED,
+    "winddown": WINDDOWN_ENABLED,
+    "nudges": NUDGE_ENABLED,
+    "insights": True,
+    "digest": DIGEST_ENABLED,
+}
+
+SETTING_LABELS = (
+    ("briefing", "\U0001F305 Morning briefing"),
+    ("winddown", "\U0001F319 Evening wind-down"),
+    ("nudges", "\u23F0 Overdue nudges"),
+    ("insights", "\U0001F4A1 Balance insights"),
+    ("digest", "\U0001F4CA Weekly digest"),
+)
 
 # --------------------------------------------------------------------------
 # TIME HELPERS
@@ -206,9 +280,13 @@ def ensure_user(data, user_id):
     user.setdefault("tasks", [])
     user.setdefault("reminders", [])
     user.setdefault("reflections", [])
+    user.setdefault("insight_cooldowns", {})
     if "next_id" not in user:
         highest = max((t.get("id", 0) for t in user["tasks"]), default=0)
         user["next_id"] = highest + 1
+    settings = user.setdefault("settings", {})
+    for key, value in DEFAULT_SETTINGS.items():
+        settings.setdefault(key, value)
     return user
 
 
@@ -220,6 +298,85 @@ def find_task(user, task_id):
 
 
 # --------------------------------------------------------------------------
+# CONCURRENCY
+# --------------------------------------------------------------------------
+
+# load_data/save_data are synchronous, so a read-modify-write with no await
+# in between is already atomic on the event loop. The danger is a job that
+# loads data, awaits a send, then saves: a handler running in that window has
+# its write silently overwritten. Jobs therefore use a three-phase pattern -
+# collect under the lock, send outside it, then re-load and mark under the
+# lock again - and every mutation goes through this lock.
+_data_lock = asyncio.Lock()
+
+
+async def read_data():
+    async with _data_lock:
+        return load_data()
+
+
+async def mutate_data(mutator):
+    """Atomically load, apply mutator(data), save. mutator must not await."""
+    async with _data_lock:
+        data = load_data()
+        result = mutator(data)
+        save_data(data)
+        return result
+
+
+# --------------------------------------------------------------------------
+# QUIET HOURS AND OUTBOUND MESSAGES
+# --------------------------------------------------------------------------
+
+
+def in_quiet_hours(dt, start, end):
+    """True when dt falls inside the quiet window.
+
+    The window normally wraps midnight (22 -> 7), which is the usual source
+    of off-by-one bugs here, so both orientations are handled explicitly.
+    """
+    if start == end:
+        return False
+    hour = dt.hour
+    if start < end:
+        return start <= hour < end
+    return hour >= start or hour < end
+
+
+def user_settings(user):
+    settings = dict(DEFAULT_SETTINGS)
+    settings.update(user.get("settings") or {})
+    return settings
+
+
+async def send_proactive(bot, user_id, text, markup=None, *, kind, settings,
+                         ignore_quiet=False):
+    """Single chokepoint for every bot-initiated message.
+
+    Returns True only if Telegram accepted it, so callers can decide whether
+    to mark the item as delivered.
+    """
+    if kind and not settings.get(kind, True):
+        return False
+    if not ignore_quiet and in_quiet_hours(
+        now(), settings.get("quiet_start", QUIET_START),
+        settings.get("quiet_end", QUIET_END)
+    ):
+        return False
+    try:
+        await bot.send_message(
+            chat_id=int(user_id),
+            text=text,
+            reply_markup=markup,
+            parse_mode="HTML",
+        )
+        return True
+    except Exception as exc:
+        print(f"[warn] {kind or 'message'} to {user_id} failed: {exc}")
+        return False
+
+
+# --------------------------------------------------------------------------
 # UI HELPERS
 # --------------------------------------------------------------------------
 
@@ -227,6 +384,7 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["\U0001F4C5 Today", "\u2795 Add task"],
         ["\U0001F4CA Reflect", "\U0001F9E0 Suggest"],
+        ["\U0001F3AF Focus", "\u2699\uFE0F Settings"],
         ["\u2753 Help"],
     ],
     resize_keyboard=True,
@@ -289,8 +447,11 @@ def today_view(user):
     lines = [
         f"\U0001F4C5 <b>Today</b>  \u00B7  {now().strftime('%a %d %b')}",
         f"<code>{bar(done_count, len(rows))}</code>  {done_count}/{len(rows)} done",
-        "",
     ]
+    streak = streak_line(user)
+    if streak:
+        lines.append(streak)
+    lines.append("")
 
     buttons = []
     for task, when in rows:
@@ -382,8 +543,11 @@ def week_view(user):
     lines = [
         f"\U0001F4CA <b>This Week</b>  \u00B7  {now().strftime('%a %d %b')}",
         f"<code>{bar(len(done), len(recent))}</code>  {len(done)}/{len(recent)} completed",
-        "",
     ]
+    streak = streak_line(user)
+    if streak:
+        lines.append(streak)
+    lines.append("")
 
     totals = {}
     for task in recent:
@@ -608,6 +772,192 @@ REFLECTION_PROMPTS = {
 
 
 # --------------------------------------------------------------------------
+# STREAKS AND INSIGHTS
+# --------------------------------------------------------------------------
+
+
+def _completed_at(task):
+    stamp = task.get("completed_at")
+    if not stamp:
+        return None
+    try:
+        return parse_dt(stamp)
+    except ValueError:
+        return None
+
+
+def completion_dates(user):
+    dates = set()
+    for task in user.get("tasks", []):
+        when = _completed_at(task)
+        if when:
+            dates.add(when.date())
+    return dates
+
+
+def current_streak(user):
+    """Consecutive days ending today, or yesterday if today is still open.
+
+    Anchoring on yesterday matters: without it the streak would read 0 every
+    morning until the first task of the day was completed.
+    """
+    dates = completion_dates(user)
+    if not dates:
+        return 0
+
+    today = now().date()
+    yesterday = today - datetime.timedelta(days=1)
+    if today in dates:
+        cursor = today
+    elif yesterday in dates:
+        cursor = yesterday
+    else:
+        return 0
+
+    streak = 0
+    while cursor in dates:
+        streak += 1
+        cursor -= datetime.timedelta(days=1)
+    return streak
+
+
+def streak_line(user):
+    streak = current_streak(user)
+    if streak <= 0:
+        return ""
+    flame = "\U0001F525" if streak >= 3 else "\u2728"
+    day_word = "day" if streak == 1 else "days"
+    return f"{flame} <b>{streak}</b> {day_word} in a row"
+
+
+def _recent_ratings(user, days):
+    cutoff = now() - datetime.timedelta(days=days)
+    out = []
+    for reflection in user.get("reflections", []):
+        rating = reflection.get("rating")
+        if not str(rating).isdigit():
+            continue
+        stamp = reflection.get("timestamp")
+        if not stamp:
+            continue
+        try:
+            if parse_dt(stamp) >= cutoff:
+                out.append(int(rating))
+        except ValueError:
+            continue
+    return out
+
+
+def _last_activity(user, category):
+    """Most recent created-or-completed time for a category, or None."""
+    latest = None
+    for task in user.get("tasks", []):
+        if task.get("category", "general") != category:
+            continue
+        for key in ("completed_at", "created", "time"):
+            stamp = task.get(key)
+            if not stamp:
+                continue
+            try:
+                when = parse_dt(stamp)
+            except ValueError:
+                continue
+            if latest is None or when > latest:
+                latest = when
+    return latest
+
+
+def compute_insights(user):
+    """Return [(key, text)] of things worth telling the user.
+
+    Each check refuses to speak without a minimum sample, so a brand new user
+    is never lectured on the basis of two tasks.
+    """
+    insights = []
+    current = now()
+
+    # 1. Balance: is one category crowding out everything else?
+    cutoff = current - datetime.timedelta(days=BALANCE_WINDOW_DAYS)
+    done = [
+        task for task in user.get("tasks", [])
+        if task.get("done") and (_completed_at(task) or cutoff) >= cutoff
+    ]
+    if len(done) >= BALANCE_MIN_TASKS:
+        counts = {}
+        for task in done:
+            category = task.get("category", "general")
+            counts[category] = counts.get(category, 0) + 1
+        top, top_n = max(counts.items(), key=lambda kv: kv[1])
+        share = round(100 * top_n / len(done))
+        if share >= BALANCE_THRESHOLD:
+            insights.append((
+                "balance",
+                f"{cat_emoji(top)} <b>{share}%</b> of your last {len(done)} "
+                f"completed tasks were <b>{escape(top)}</b>. Worth protecting "
+                "time for something else this week?",
+            ))
+
+    # 2. Burnout: is energy trending low?
+    ratings = _recent_ratings(user, BURNOUT_WINDOW_DAYS)
+    if len(ratings) >= BURNOUT_MIN_RATINGS:
+        average = sum(ratings) / len(ratings)
+        if average < BURNOUT_THRESHOLD:
+            insights.append((
+                "burnout",
+                f"\U0001FAAB Your energy averaged <b>{average:.1f}</b>/5 across "
+                f"{len(ratings)} tasks this week. That is low \u2014 consider a "
+                "lighter week, or fewer commitments.",
+            ))
+
+    # 3. Neglect: has a category the user cares about gone quiet?
+    for category in NEGLECT_CATEGORIES:
+        last = _last_activity(user, category)
+        if last is None:
+            continue
+        days = (current - last).days
+        if days >= NEGLECT_DAYS:
+            insights.append((
+                f"neglect:{category}",
+                f"{cat_emoji(category)} Nothing logged under "
+                f"<b>{escape(category)}</b> for <b>{days}</b> days.",
+            ))
+
+    return insights
+
+
+def due_insights(user):
+    """Filter computed insights by their per-key cooldown."""
+    cooldowns = user.get("insight_cooldowns") or {}
+    current = now()
+    fresh = []
+    for key, text in compute_insights(user):
+        stamp = cooldowns.get(key)
+        if stamp:
+            try:
+                if (current - parse_dt(stamp)).days < INSIGHT_COOLDOWN_DAYS:
+                    continue
+            except ValueError:
+                pass
+        fresh.append((key, text))
+    return fresh
+
+
+def mark_insights_sent(user, keys):
+    cooldowns = user.setdefault("insight_cooldowns", {})
+    stamp = now().isoformat()
+    for key in keys:
+        cooldowns[key] = stamp
+
+
+def insight_block(insights):
+    if not insights:
+        return ""
+    lines = ["", "\u2500" * 10, "\U0001F4A1 <b>Worth noticing</b>", ""]
+    lines.extend(text for _, text in insights)
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
 # COMMANDS
 # --------------------------------------------------------------------------
 
@@ -632,20 +982,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    quiet = (
+        "off" if QUIET_START == QUIET_END
+        else f"{QUIET_START:02d}:00\u2013{QUIET_END:02d}:00"
+    )
     await update.message.reply_html(
-        "<b>Commands</b>\n\n"
+        "<b>Tasks</b>\n"
         "<code>/add &lt;task&gt; &lt;time&gt; [category]</code>\n"
         "   Times: <code>3pm</code>, <code>3:30pm</code>, <code>15:00</code>, "
         "<code>tomorrow</code>, <code>tomorrow 9am</code>\n"
         "/today \u2014 today's tasks with buttons\n"
-        "/week \u2014 weekly progress bars\n"
-        "/done &lt;id&gt; \u2014 complete a task\n"
-        "/snooze &lt;id&gt; \u2014 delay 30 mins\n"
-        "/reschedule &lt;id&gt; &lt;time&gt; \u2014 move a task\n"
-        "/suggest \u2014 AI suggestion\n"
-        "/plan &lt;goal&gt; \u2014 AI breakdown\n"
-        "/assist &lt;id&gt; \u2014 coaching tip\n"
-        "/reflect \u2014 weekly reflection\n\n"
+        "/week \u2014 weekly progress and streak\n"
+        "/done &lt;id&gt; \u00B7 /snooze &lt;id&gt; \u00B7 "
+        "/reschedule &lt;id&gt; &lt;time&gt;\n\n"
+        "<b>Focus</b>\n"
+        "<code>/focus 25</code> \u2014 timer, pings when done\n"
+        "<code>/focus 50 deep work</code> \u2014 with a label\n"
+        "<code>/focus stop</code> \u2014 cancel\n\n"
+        "<b>AI</b>\n"
+        "/suggest \u2014 task suggestion\n"
+        "/plan &lt;goal&gt; \u2014 break a goal into steps\n"
+        "/assist &lt;id&gt; \u2014 coaching tip\n\n"
+        "<b>Automatic</b>\n"
+        f"\U0001F305 Morning briefing \u2014 {BRIEFING_HOUR:02d}:00\n"
+        f"\U0001F319 Evening wind-down \u2014 {WINDDOWN_HOUR:02d}:00\n"
+        f"\U0001F4CA Weekly digest \u2014 {DAY_NAMES[DIGEST_DAY]} "
+        f"{DIGEST_HOUR:02d}:00\n"
+        f"\U0001F507 Quiet hours \u2014 {quiet}\n"
+        "Preview any of them: /brief \u00B7 /winddown \u00B7 /digest\n"
+        "/settings \u2014 toggle each one\n\n"
         f"Categories: {', '.join(CATEGORIES)}\n"
         f"Timezone: <b>{escape(_TZ_NAME)}</b>",
         reply_markup=MAIN_KEYBOARD,
@@ -966,6 +1331,148 @@ async def weekly_reflect(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # --------------------------------------------------------------------------
+# FOCUS TIMER
+# --------------------------------------------------------------------------
+
+
+def _focus_job_name(user_id):
+    return f"focus:{user_id}"
+
+
+def _cancel_focus(job_queue, user_id):
+    """Remove any running focus timer. Returns how many were cancelled."""
+    if job_queue is None:
+        return 0
+    jobs = job_queue.get_jobs_by_name(_focus_job_name(user_id))
+    for job in jobs:
+        job.schedule_removal()
+    return len(jobs)
+
+
+async def focus_done(context: ContextTypes.DEFAULT_TYPE):
+    minutes = (context.job.data or {}).get("minutes", FOCUS_DEFAULT)
+    label = (context.job.data or {}).get("label")
+    body = (
+        f"\U0001F514 <b>Focus block finished</b>\n\n"
+        f"That was <b>{minutes}</b> minute{'' if minutes == 1 else 's'}"
+        + (f" on {escape(label)}" if label else "")
+        + ".\n\nStretch, drink water, then decide the next block."
+    )
+    try:
+        await context.bot.send_message(
+            chat_id=context.job.chat_id,
+            text=body,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("\U0001F4C5 Today", callback_data="nav:today"),
+            ]]),
+        )
+    except Exception as exc:
+        print(f"[warn] Focus completion to {context.job.chat_id} failed: {exc}")
+
+
+async def focus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    args = list(context.args or [])
+
+    if args and args[0].lower() in ("stop", "cancel", "off", "end"):
+        cancelled = _cancel_focus(context.job_queue, user_id)
+        await update.message.reply_html(
+            "\U0001F6D1 Focus timer cancelled."
+            if cancelled else "No focus timer was running."
+        )
+        return
+
+    minutes = FOCUS_DEFAULT
+    label = None
+    if args:
+        try:
+            minutes = max(1, min(FOCUS_MAX, int(args[0])))
+            label = " ".join(args[1:]).strip() or None
+        except ValueError:
+            label = " ".join(args).strip() or None
+
+    if context.job_queue is None:
+        await update.message.reply_text("Timers are unavailable right now.")
+        return
+
+    _cancel_focus(context.job_queue, user_id)
+    ends_at = now() + datetime.timedelta(minutes=minutes)
+    context.job_queue.run_once(
+        focus_done,
+        when=datetime.timedelta(minutes=minutes),
+        name=_focus_job_name(user_id),
+        chat_id=update.effective_chat.id,
+        data={"minutes": minutes, "label": label},
+    )
+
+    await update.message.reply_html(
+        f"\U0001F3AF <b>Focus: {minutes} min</b>"
+        + (f"\n{escape(label)}" if label else "")
+        + f"\n\nI'll ping you at <b>{fmt_time(ends_at)}</b>. "
+        "Put the phone down.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("\U0001F6D1 Cancel", callback_data="focus:stop"),
+        ]]),
+    )
+
+
+# --------------------------------------------------------------------------
+# SETTINGS
+# --------------------------------------------------------------------------
+
+
+def settings_view(user):
+    """Toggle panel. Returns (html, markup)."""
+    settings = user_settings(user)
+    quiet_start = settings.get("quiet_start", QUIET_START)
+    quiet_end = settings.get("quiet_end", QUIET_END)
+
+    quiet_desc = (
+        "off" if quiet_start == quiet_end
+        else f"{quiet_start:02d}:00 \u2192 {quiet_end:02d}:00"
+    )
+
+    text = (
+        "\u2699\uFE0F <b>Settings</b>\n\n"
+        f"\U0001F551 Timezone: <b>{escape(_TZ_NAME)}</b>\n"
+        f"\U0001F507 Quiet hours: <b>{quiet_desc}</b>\n\n"
+        "<i>Quiet hours silence briefings, wind-downs, nudges and digests. "
+        "Reminders you scheduled yourself always come through.</i>\n\n"
+        "Tap to toggle:"
+    )
+
+    rows = []
+    for key, label in SETTING_LABELS:
+        mark = "\u2705" if settings.get(key, True) else "\u2B1C"
+        rows.append([
+            InlineKeyboardButton(f"{mark} {label}", callback_data=f"set:toggle:{key}")
+        ])
+
+    rows.append([
+        InlineKeyboardButton("\U0001F507 Start \u2212", callback_data="set:quiet:start:dec"),
+        InlineKeyboardButton(f"{quiet_start:02d}:00", callback_data="noop"),
+        InlineKeyboardButton("+", callback_data="set:quiet:start:inc"),
+    ])
+    rows.append([
+        InlineKeyboardButton("\U0001F514 End \u2212", callback_data="set:quiet:end:dec"),
+        InlineKeyboardButton(f"{quiet_end:02d}:00", callback_data="noop"),
+        InlineKeyboardButton("+", callback_data="set:quiet:end:inc"),
+    ])
+    rows.append([InlineKeyboardButton("\U0001F4C5 Today", callback_data="nav:today")])
+
+    return text, InlineKeyboardMarkup(rows)
+
+
+async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    data = load_data()
+    user = ensure_user(data, str(update.effective_user.id))
+    save_data(data)
+    text, markup = settings_view(user)
+    await update.message.reply_html(text, reply_markup=markup)
+
+
+# --------------------------------------------------------------------------
 # CALLBACK ROUTER
 # --------------------------------------------------------------------------
 
@@ -1010,10 +1517,117 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await _handle_reflection_choice(query, context, parts)
             return
 
+        if namespace == "set":
+            await _handle_settings(query, context, data, user, parts)
+            return
+
+        if namespace == "roll" and parts[1] == "tomorrow":
+            await _handle_rollover(query, context, data, user)
+            return
+
+        if namespace == "focus" and parts[1] == "stop":
+            cancelled = _cancel_focus(context.job_queue, str(query.from_user.id))
+            await query.answer(
+                "Focus timer cancelled." if cancelled else "No timer running."
+            )
+            return
+
+        if namespace == "noop":
+            await query.answer()
+            return
+
         await query.answer("That button is no longer active.", show_alert=False)
 
     except (IndexError, ValueError):
         await query.answer("Sorry, that button is malformed.", show_alert=True)
+
+
+async def _handle_settings(query, context, data, user, parts):
+    """set:toggle:<key> or set:quiet:<start|end>:<inc|dec>."""
+    action = parts[1]
+    settings = user.setdefault("settings", {})
+    for key, value in DEFAULT_SETTINGS.items():
+        settings.setdefault(key, value)
+
+    if action == "toggle":
+        key = parts[2]
+        if key not in dict(SETTING_LABELS):
+            await query.answer("Unknown setting.")
+            return
+        settings[key] = not settings.get(key, True)
+        save_data(data)
+        await query.answer("On" if settings[key] else "Off")
+
+    elif action == "quiet":
+        field, direction = parts[2], parts[3]
+        if field not in ("start", "end") or direction not in ("inc", "dec"):
+            await query.answer("Unknown setting.")
+            return
+        setting_key = f"quiet_{field}"
+        step = 1 if direction == "inc" else -1
+        settings[setting_key] = (settings.get(setting_key, 0) + step) % 24
+        save_data(data)
+        await query.answer(f"{settings[setting_key]:02d}:00")
+
+    else:
+        await query.answer("Unknown setting.")
+        return
+
+    text, markup = settings_view(user)
+    await safe_edit(query, text, markup)
+
+
+async def _handle_rollover(query, context, data, user):
+    """Move every still-open task dated today or earlier to tomorrow."""
+    today = now().date()
+    tomorrow_delta = datetime.timedelta(days=1)
+    moved = 0
+
+    for task in user["tasks"]:
+        if task.get("done"):
+            continue
+        try:
+            when = parse_dt(task["time"])
+        except (ValueError, KeyError):
+            continue
+        if when.date() > today:
+            continue
+
+        new_time = when + tomorrow_delta
+        while new_time.date() <= today:
+            new_time += tomorrow_delta
+        task["time"] = new_time.isoformat()
+        task["nudged"] = False
+
+        reminder_at = new_time - datetime.timedelta(minutes=REMINDER_LEAD_MINUTES)
+        for reminder in user["reminders"]:
+            if reminder.get("task_id") == task["id"]:
+                reminder["time"] = reminder_at.isoformat()
+                reminder["sent"] = False
+                break
+        else:
+            user["reminders"].append({
+                "task_id": task["id"],
+                "time": reminder_at.isoformat(),
+                "sent": False,
+            })
+        moved += 1
+
+    if not moved:
+        await query.answer("Nothing to roll over.")
+        return
+
+    save_data(data)
+    await query.answer(f"Moved {moved} to tomorrow.")
+    await safe_edit(
+        query,
+        f"\u27A1\uFE0F Moved <b>{moved}</b> task"
+        f"{'' if moved == 1 else 's'} to tomorrow.\n\n"
+        "<i>Reminders were reset to match.</i>",
+        InlineKeyboardMarkup([[
+            InlineKeyboardButton("\U0001F4C5 Today", callback_data="nav:today"),
+        ]]),
+    )
 
 
 async def _handle_task_action(query, context, data, user, parts):
@@ -1164,6 +1778,8 @@ BUTTON_ROUTES = {
     "\u2795 Add task": None,
     "\U0001F4CA Reflect": weekly_reflect,
     "\U0001F9E0 Suggest": ai_suggest,
+    "\U0001F3AF Focus": focus_cmd,
+    "\u2699\uFE0F Settings": settings_cmd,
     "\u2753 Help": help_command,
 }
 
@@ -1230,67 +1846,146 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
+    """Deliver due reminders and one-shot overdue nudges.
+
+    Three phases: collect under the lock, send outside it, then re-load and
+    mark under the lock. Sending inside the read-modify-write window used to
+    let a concurrent handler write get overwritten.
+    """
     current = now()
-    data = load_data()
-    dirty = False
+    outbox = []
 
-    for user_id, user in data.items():
-        for reminder in user.get("reminders", []):
-            if reminder.get("sent"):
-                continue
-            try:
-                due = parse_dt(reminder["time"])
-            except (ValueError, KeyError):
-                continue
-            if current < due:
-                continue
+    async with _data_lock:
+        data = load_data()
+        stale = []
 
-            task = next(
-                (t for t in user.get("tasks", []) if t.get("id") == reminder["task_id"]),
-                None,
-            )
-            if not task or task.get("done"):
-                reminder["sent"] = True
-                dirty = True
-                continue
+        for user_id in list(data.keys()):
+            user = ensure_user(data, user_id)
+            settings = user_settings(user)
 
-            markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("\u2705 Done", callback_data=f"t:done:{task['id']}"),
-                InlineKeyboardButton(
-                    f"\U0001F634 +{SNOOZE_MINUTES}m", callback_data=f"t:snz:{task['id']}"
-                ),
-                InlineKeyboardButton("\u270F\uFE0F Move", callback_data=f"t:resch:{task['id']}"),
-            ]])
+            for reminder in user["reminders"]:
+                if reminder.get("sent"):
+                    continue
+                try:
+                    due = parse_dt(reminder["time"])
+                except (ValueError, KeyError):
+                    continue
+                if current < due:
+                    continue
 
-            try:
-                await context.bot.send_message(
-                    chat_id=int(user_id),
-                    text=(
+                task = find_task(user, reminder.get("task_id"))
+                if not task or task.get("done"):
+                    stale.append((user_id, reminder.get("task_id")))
+                    continue
+
+                outbox.append({
+                    "user_id": user_id,
+                    "task_id": task["id"],
+                    "field": "reminder",
+                    "settings": settings,
+                    "text": (
                         f"\u23F0 <b>Reminder</b>\n\n"
                         f"{cat_emoji(task.get('category', 'general'))} "
                         f"<b>{escape(task['text'])}</b>\n"
                         f"\U0001F551 {fmt_time(parse_dt(task['time']))}"
                     ),
-                    reply_markup=markup,
-                    parse_mode="HTML",
-                )
-                reminder["sent"] = True
-                dirty = True
-            except Exception as exc:
-                print(f"[warn] Reminder to {user_id} failed: {exc}")
+                })
 
-    if dirty:
+            # Overdue nudge: fires once per task, never repeats.
+            if settings.get("nudges", True):
+                threshold = current - datetime.timedelta(minutes=NUDGE_AFTER_MINUTES)
+                for task in user["tasks"]:
+                    if task.get("done") or task.get("nudged"):
+                        continue
+                    try:
+                        when = parse_dt(task["time"])
+                    except (ValueError, KeyError):
+                        continue
+                    if when > threshold:
+                        continue
+                    late = int((current - when).total_seconds() // 60)
+                    outbox.append({
+                        "user_id": user_id,
+                        "task_id": task["id"],
+                        "field": "nudged",
+                        "settings": settings,
+                        "text": (
+                            f"\U0001F440 <b>Still open</b>\n\n"
+                            f"{cat_emoji(task.get('category', 'general'))} "
+                            f"<b>{escape(task['text'])}</b>\n"
+                            f"Was due {late} min ago."
+                        ),
+                    })
+
+        for user_id, task_id in stale:
+            user = data.get(user_id) or {}
+            for reminder in user.get("reminders", []):
+                if reminder.get("task_id") == task_id:
+                    reminder["sent"] = True
+        if stale:
+            save_data(data)
+
+    if not outbox:
+        return
+
+    delivered = []
+    for item in outbox:
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton("\u2705 Done", callback_data=f"t:done:{item['task_id']}"),
+            InlineKeyboardButton(
+                f"\U0001F634 +{SNOOZE_MINUTES}m", callback_data=f"t:snz:{item['task_id']}"
+            ),
+            InlineKeyboardButton(
+                "\u270F\uFE0F Move", callback_data=f"t:resch:{item['task_id']}"
+            ),
+        ]])
+        # Reminders are explicitly user-scheduled, so they ignore quiet hours.
+        # Nudges are bot-initiated and do not.
+        ok = await send_proactive(
+            context.bot,
+            item["user_id"],
+            item["text"],
+            markup,
+            kind=None if item["field"] == "reminder" else "nudges",
+            settings=item["settings"],
+            ignore_quiet=item["field"] == "reminder",
+        )
+        if ok:
+            delivered.append(item)
+
+    if not delivered:
+        return
+
+    async with _data_lock:
+        data = load_data()
+        for item in delivered:
+            user = data.get(item["user_id"])
+            if not user:
+                continue
+            if item["field"] == "reminder":
+                for reminder in user.get("reminders", []):
+                    if reminder.get("task_id") == item["task_id"]:
+                        reminder["sent"] = True
+                        break
+            else:
+                task = next(
+                    (t for t in user.get("tasks", []) if t.get("id") == item["task_id"]),
+                    None,
+                )
+                if task:
+                    task["nudged"] = True
         save_data(data)
 
 
-def digest_content(user):
+def digest_content(user, insights=()):
     """Weekly stats plus a reflection prompt. Returns (html, markup)."""
     text, _ = week_view(user)
     domain = random.choice(list(REFLECTION_PROMPTS))
     prompt = random.choice(REFLECTION_PROMPTS[domain])
 
     body = (
-        f"{text}\n\n"
+        f"{text}"
+        f"{insight_block(insights)}\n\n"
         "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
         f"\U0001F33F <b>Weekly reflection</b>\n\n"
         f"<i>{escape(prompt)}</i>\n\n"
@@ -1311,50 +2006,311 @@ def digest_content(user):
     return body, markup
 
 
+def briefing_content(user):
+    """Morning briefing. Returns (html, markup) or (None, None) if nothing."""
+    today = now().date()
+    rows = []
+    for task in user.get("tasks", []):
+        if task.get("done"):
+            continue
+        try:
+            when = parse_dt(task["time"])
+        except (ValueError, KeyError):
+            continue
+        if when.date() == today:
+            rows.append((task, when))
+
+    if not rows:
+        return None, None
+
+    rows.sort(key=lambda pair: pair[1])
+    lines = [
+        f"\U0001F305 <b>Good morning</b>  \u00B7  {now().strftime('%a %d %b')}",
+    ]
+    streak = streak_line(user)
+    if streak:
+        lines.append(streak)
+    lines.append("")
+    lines.append(
+        f"You have <b>{len(rows)}</b> task{'' if len(rows) == 1 else 's'} today:"
+    )
+    for task, when in rows[:8]:
+        lines.append(
+            f"\u23F3 <b>{fmt_time(when)}</b> \u2014 {escape(task['text'])} "
+            f"{cat_emoji(task.get('category', 'general'))}"
+        )
+    if len(rows) > 8:
+        lines.append(f"<i>\u2026and {len(rows) - 8} more</i>")
+
+    first_task, first_when = rows[0]
+    lines.append("")
+    lines.append(
+        f"First up at <b>{fmt_time(first_when)}</b>. "
+        f"{escape(first_task['text'])}"
+    )
+
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton("\U0001F4C5 Open today", callback_data="nav:today"),
+        InlineKeyboardButton("\U0001F9E0 Coach me", callback_data=f"t:coach:{first_task['id']}"),
+    ]])
+    return "\n".join(lines), markup
+
+
+def winddown_content(user, insights=()):
+    """Evening recap. Returns (html, markup, rollover_ids)."""
+    today = now().date()
+    done_today, still_open = [], []
+    for task in user.get("tasks", []):
+        try:
+            when = parse_dt(task["time"])
+        except (ValueError, KeyError):
+            continue
+        completed = _completed_at(task)
+        if task.get("done") and completed and completed.date() == today:
+            done_today.append(task)
+        elif not task.get("done") and when.date() <= today:
+            still_open.append((task, when))
+
+    if not done_today and not still_open:
+        return None, None, []
+
+    total = len(done_today) + len(still_open)
+    lines = [
+        f"\U0001F319 <b>Winding down</b>  \u00B7  {now().strftime('%a %d %b')}",
+        f"<code>{bar(len(done_today), total)}</code>  "
+        f"{len(done_today)}/{total} done today",
+    ]
+    streak = streak_line(user)
+    if streak:
+        lines.append(streak)
+
+    if done_today:
+        lines.append("")
+        lines.append("\u2705 <b>Completed</b>")
+        for task in done_today[:6]:
+            lines.append(
+                f"   {cat_emoji(task.get('category', 'general'))} "
+                f"{escape(task['text'])}"
+            )
+
+    still_open.sort(key=lambda pair: pair[1])
+    rollover_ids = [task["id"] for task, _ in still_open]
+    if still_open:
+        lines.append("")
+        lines.append("\u23F3 <b>Still open</b>")
+        for task, when in still_open[:6]:
+            lines.append(
+                f"   {cat_emoji(task.get('category', 'general'))} "
+                f"{escape(task['text'])} <i>({fmt_time(when)})</i>"
+            )
+        if len(still_open) > 6:
+            lines.append(f"   <i>\u2026and {len(still_open) - 6} more</i>")
+
+    body = "\n".join(lines) + insight_block(insights)
+
+    buttons = []
+    if rollover_ids:
+        count = len(rollover_ids)
+        buttons.append([InlineKeyboardButton(
+            f"\u27A1\uFE0F Roll {count} to tomorrow", callback_data="roll:tomorrow"
+        )])
+    buttons.append([
+        InlineKeyboardButton("\U0001F4C5 Today", callback_data="nav:today"),
+        InlineKeyboardButton("\U0001F4CA Week", callback_data="dash:week"),
+    ])
+    return body, InlineKeyboardMarkup(buttons), rollover_ids
+
+
+async def _run_daily_broadcast(context, *, kind, stamp_key, builder, label):
+    """Shared driver for the once-a-day proactive jobs.
+
+    Collects under the lock, sends outside it, then records delivery and
+    insight cooldowns under the lock again.
+    """
+    today_iso = now().date().isoformat()
+    outbox = []
+
+    async with _data_lock:
+        data = load_data()
+        for user_id in list(data.keys()):
+            user = ensure_user(data, user_id)
+            settings = user_settings(user)
+            if not settings.get(kind, True):
+                continue
+            if user.get(stamp_key) == today_iso:
+                continue
+            if not user["tasks"]:
+                continue
+
+            insights = due_insights(user) if settings.get("insights", True) else []
+            built = builder(user, insights)
+            body, markup = built[0], built[1]
+            if not body:
+                continue
+            outbox.append({
+                "user_id": user_id,
+                "settings": settings,
+                "body": body,
+                "markup": markup,
+                "insight_keys": [key for key, _ in insights],
+            })
+        save_data(data)
+
+    sent = 0
+    for item in outbox:
+        ok = await send_proactive(
+            context.bot,
+            item["user_id"],
+            item["body"],
+            item["markup"],
+            kind=kind,
+            settings=item["settings"],
+        )
+        if not ok:
+            continue
+        sent += 1
+        async with _data_lock:
+            data = load_data()
+            user = ensure_user(data, item["user_id"])
+            user[stamp_key] = today_iso
+            mark_insights_sent(user, item["insight_keys"])
+            save_data(data)
+
+    print(f"[job] {label} sent to {sent} user(s).")
+
+
+async def morning_briefing(context: ContextTypes.DEFAULT_TYPE):
+    await _run_daily_broadcast(
+        context,
+        kind="briefing",
+        stamp_key="last_briefing",
+        builder=lambda user, insights: briefing_content(user),
+        label="Morning briefing",
+    )
+
+
+async def evening_winddown(context: ContextTypes.DEFAULT_TYPE):
+    await _run_daily_broadcast(
+        context,
+        kind="winddown",
+        stamp_key="last_winddown",
+        builder=lambda user, insights: winddown_content(user, insights),
+        label="Evening wind-down",
+    )
+
+
 async def weekly_digest(context: ContextTypes.DEFAULT_TYPE):
-    """Proactively send each user their week plus a reflection prompt.
+    """Send each user their week plus a reflection prompt.
 
     Runs on DIGEST_DAY at DIGEST_HOUR in BOT_TZ. Guarded by an ISO-week
     stamp so a restart cannot double-send.
     """
-    data = load_data()
     this_week = now().isocalendar()[:2]
-    sent = 0
-    dirty = False
+    outbox = []
 
-    for user_id in list(data.keys()):
-        user = ensure_user(data, user_id)
+    async with _data_lock:
+        data = load_data()
+        for user_id in list(data.keys()):
+            user = ensure_user(data, user_id)
+            settings = user_settings(user)
+            if not settings.get("digest", True):
+                continue
 
-        stamp = user.get("last_digest")
-        if stamp:
-            try:
-                if parse_dt(stamp).isocalendar()[:2] == this_week:
-                    continue
-            except ValueError:
-                pass
+            stamp = user.get("last_digest")
+            if stamp:
+                try:
+                    if parse_dt(stamp).isocalendar()[:2] == this_week:
+                        continue
+                except ValueError:
+                    pass
 
-        # Skip users with nothing to report; an empty digest is just noise.
-        if not user["tasks"]:
-            continue
+            # Skip users with nothing to report; an empty digest is just noise.
+            if not user["tasks"]:
+                continue
 
-        body, markup = digest_content(user)
-
-        try:
-            await context.bot.send_message(
-                chat_id=int(user_id),
-                text=body,
-                reply_markup=markup,
-                parse_mode="HTML",
-            )
-            user["last_digest"] = now().isoformat()
-            dirty = True
-            sent += 1
-        except Exception as exc:
-            print(f"[warn] Weekly digest to {user_id} failed: {exc}")
-
-    if dirty:
+            insights = due_insights(user) if settings.get("insights", True) else []
+            body, markup = digest_content(user, insights)
+            outbox.append({
+                "user_id": user_id,
+                "settings": settings,
+                "body": body,
+                "markup": markup,
+                "insight_keys": [key for key, _ in insights],
+            })
         save_data(data)
+
+    sent = 0
+    for item in outbox:
+        ok = await send_proactive(
+            context.bot,
+            item["user_id"],
+            item["body"],
+            item["markup"],
+            kind="digest",
+            settings=item["settings"],
+        )
+        if not ok:
+            continue
+        sent += 1
+        async with _data_lock:
+            data = load_data()
+            user = ensure_user(data, item["user_id"])
+            user["last_digest"] = now().isoformat()
+            mark_insights_sent(user, item["insight_keys"])
+            save_data(data)
+
     print(f"[job] Weekly digest sent to {sent} user(s).")
+
+
+BACKUP_DIR = os.path.join(DATA_DIR, "backups")
+
+
+def _prune_backups(keep):
+    try:
+        names = sorted(
+            n for n in os.listdir(BACKUP_DIR)
+            if n.startswith("user_data_") and n.endswith(".json")
+        )
+    except OSError:
+        return 0
+    removed = 0
+    for name in names[:-keep] if keep < len(names) else []:
+        try:
+            os.remove(os.path.join(BACKUP_DIR, name))
+            removed += 1
+        except OSError:
+            pass
+    return removed
+
+
+async def backup_job(context: ContextTypes.DEFAULT_TYPE):
+    """Snapshot the data file. Cheap insurance: it is only kilobytes."""
+    data = await read_data()
+    if not data:
+        print("[job] Backup skipped, no data yet.")
+        return
+
+    try:
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        path = os.path.join(
+            BACKUP_DIR, f"user_data_{now().strftime('%Y%m%d_%H%M%S')}.json"
+        )
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2, ensure_ascii=False)
+        os.replace(tmp, path)
+        pruned = _prune_backups(BACKUP_KEEP)
+        print(
+            f"[job] Backup written to {path}"
+            + (f" ({pruned} old file(s) pruned)" if pruned else "")
+        )
+    except OSError as exc:
+        print(f"[error] Backup failed: {exc}")
+
+
+# --------------------------------------------------------------------------
+# PREVIEW COMMANDS
+# --------------------------------------------------------------------------
 
 
 async def digest_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1370,11 +2326,59 @@ async def digest_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    body, markup = digest_content(user)
+    body, markup = digest_content(user, compute_insights(user))
     schedule = (
         f"{DAY_NAMES[DIGEST_DAY]} at {DIGEST_HOUR:02d}:00 {_TZ_NAME}"
         if DIGEST_ENABLED
         else "disabled"
+    )
+    await update.message.reply_html(
+        f"{body}\n\n<i>Automatic delivery: {escape(schedule)}</i>",
+        reply_markup=markup,
+    )
+
+
+async def brief_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Preview the morning briefing on demand."""
+    data = load_data()
+    user = ensure_user(data, str(update.effective_user.id))
+    save_data(data)
+
+    body, markup = briefing_content(user)
+    if not body:
+        await update.message.reply_html(
+            "Nothing scheduled for today, so there would be no briefing.\n\n"
+            "Add something with <code>/add Call mom 7pm family</code>"
+        )
+        return
+
+    schedule = (
+        f"daily at {BRIEFING_HOUR:02d}:00 {_TZ_NAME}"
+        if BRIEFING_ENABLED else "disabled"
+    )
+    await update.message.reply_html(
+        f"{body}\n\n<i>Automatic delivery: {escape(schedule)}</i>",
+        reply_markup=markup,
+    )
+
+
+async def winddown_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Preview the evening wind-down on demand."""
+    data = load_data()
+    user = ensure_user(data, str(update.effective_user.id))
+    save_data(data)
+
+    body, markup, _ = winddown_content(user, compute_insights(user))
+    if not body:
+        await update.message.reply_html(
+            "Nothing recorded for today, so there would be no wind-down.\n\n"
+            "Add something with <code>/add Call mom 7pm family</code>"
+        )
+        return
+
+    schedule = (
+        f"daily at {WINDDOWN_HOUR:02d}:00 {_TZ_NAME}"
+        if WINDDOWN_ENABLED else "disabled"
     )
     await update.message.reply_html(
         f"{body}\n\n<i>Automatic delivery: {escape(schedule)}</i>",
@@ -1392,10 +2396,14 @@ async def post_init(application: Application):
         BotCommand("today", "Today's tasks, with buttons"),
         BotCommand("add", "Add a task: /add Call mom 7pm family"),
         BotCommand("week", "Weekly progress"),
+        BotCommand("focus", "Start a focus timer: /focus 25"),
         BotCommand("suggest", "AI task suggestion"),
         BotCommand("plan", "Break a goal into steps"),
         BotCommand("reflect", "Weekly reflection"),
-        BotCommand("digest", "Preview your weekly digest now"),
+        BotCommand("brief", "Preview your morning briefing"),
+        BotCommand("winddown", "Preview your evening wind-down"),
+        BotCommand("digest", "Preview your weekly digest"),
+        BotCommand("settings", "Toggle automations and quiet hours"),
         BotCommand("done", "Complete a task by id"),
         BotCommand("snooze", "Delay a task 30 mins"),
         BotCommand("reschedule", "Move a task to a new time"),
@@ -1416,6 +2424,13 @@ def main():
             "filesystem and WILL be lost on redeploy. Mount a Railway Volume "
             "and set DATA_DIR to its mount path."
         )
+    else:
+        # Fail loudly at startup rather than silently at 03:00.
+        try:
+            os.makedirs(BACKUP_DIR, exist_ok=True)
+            print(f"[init] Backup directory ready: {BACKUP_DIR}")
+        except OSError as exc:
+            print(f"[warn] Cannot create {BACKUP_DIR}: {exc}. Backups will fail.")
 
     application = Application.builder().token(token).post_init(post_init).build()
 
@@ -1429,6 +2444,10 @@ def main():
     application.add_handler(CommandHandler("reschedule", reschedule_task))
     application.add_handler(CommandHandler("reflect", weekly_reflect))
     application.add_handler(CommandHandler("digest", digest_now))
+    application.add_handler(CommandHandler("brief", brief_now))
+    application.add_handler(CommandHandler("winddown", winddown_now))
+    application.add_handler(CommandHandler("settings", settings_cmd))
+    application.add_handler(CommandHandler("focus", focus_cmd))
     application.add_handler(CommandHandler(["suggest", "ai_suggest"], ai_suggest))
     application.add_handler(CommandHandler("plan", plan_goal))
     application.add_handler(CommandHandler("assist", assist_task))
@@ -1436,11 +2455,35 @@ def main():
     application.add_handler(CallbackQueryHandler(on_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
-    application.job_queue.run_repeating(check_reminders, interval=60, first=10)
+    jobs = application.job_queue
+    jobs.run_repeating(check_reminders, interval=60, first=10)
+
+    # tzinfo must be explicit on every scheduled time: a naive time would be
+    # treated as UTC and fire hours off.
+    def daily(callback, hour, name):
+        jobs.run_daily(
+            callback,
+            time=datetime.time(hour=hour, minute=0, tzinfo=TZ),
+            name=name,
+        )
+
+    if BRIEFING_ENABLED:
+        daily(morning_briefing, BRIEFING_HOUR, "morning_briefing")
+        print(f"[init] Morning briefing at {BRIEFING_HOUR:02d}:00 {_TZ_NAME}")
+
+    if WINDDOWN_ENABLED:
+        daily(evening_winddown, WINDDOWN_HOUR, "evening_winddown")
+        print(f"[init] Evening wind-down at {WINDDOWN_HOUR:02d}:00 {_TZ_NAME}")
+
+    if BACKUP_ENABLED:
+        daily(backup_job, BACKUP_HOUR, "backup")
+        print(
+            f"[init] Backup at {BACKUP_HOUR:02d}:00 {_TZ_NAME}, "
+            f"keeping {BACKUP_KEEP}"
+        )
 
     if DIGEST_ENABLED:
-        # tzinfo must be explicit: a naive time would be treated as UTC.
-        application.job_queue.run_daily(
+        jobs.run_daily(
             weekly_digest,
             time=datetime.time(hour=DIGEST_HOUR, minute=0, tzinfo=TZ),
             days=(DIGEST_DAY,),
@@ -1452,6 +2495,27 @@ def main():
         )
     else:
         print("[init] Weekly digest disabled (DIGEST_ENABLED=0)")
+
+    quiet = (
+        "off" if QUIET_START == QUIET_END
+        else f"{QUIET_START:02d}:00-{QUIET_END:02d}:00"
+    )
+    print(f"[init] Quiet hours default: {quiet} (reminders exempt)")
+
+    # A job scheduled inside quiet hours would be silently swallowed by
+    # send_proactive, which looks exactly like the feature being broken.
+    probe = now()
+    for label, hour, enabled in (
+        ("Morning briefing", BRIEFING_HOUR, BRIEFING_ENABLED),
+        ("Evening wind-down", WINDDOWN_HOUR, WINDDOWN_ENABLED),
+        ("Weekly digest", DIGEST_HOUR, DIGEST_ENABLED),
+    ):
+        if enabled and in_quiet_hours(probe.replace(hour=hour), QUIET_START, QUIET_END):
+            print(
+                f"[warn] {label} is scheduled at {hour:02d}:00, which falls "
+                f"inside quiet hours ({quiet}), so it will be suppressed. "
+                "Move the hour or change QUIET_START/QUIET_END."
+            )
 
     # Keep startup logs ASCII: a non-UTF8 stdout would crash on emoji.
     print(f"[init] LifeBalance Bot running (tz={_TZ_NAME}, data={DATA_FILE})")
