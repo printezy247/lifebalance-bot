@@ -83,7 +83,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /today → See your priorities\n"
         "• /done [task_id] → Mark task as complete\n"
         "• /snooze [task_id] → Delay task by 30 mins\n"
-        "• /ai suggest → Get AI-powered task suggestion\n"
+        "• /ai_suggest → Get AI-powered task suggestion\n"
         "• /plan [goal] → Break goal into steps\n"
         "• /assist [task_id] → Get coaching tip mid-task\n"
         "• /reflect → Weekly reflection (every Sunday)\n"
@@ -97,7 +97,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/today → View today’s tasks\n"
         "/done <task_id> → Mark task as complete\n"
         "/snooze <task_id> → Delay task by 30 mins\n"
-        "/ai suggest → Get AI-powered task suggestion\n"
+        "/ai_suggest → Get AI-powered task suggestion\n"
         "/plan [goal] → Break goal into steps\n"
         "/assist [task_id] → Get coaching tip mid-task\n"
         "/reflect → Weekly reflection (run every Sunday)\n"
@@ -637,7 +637,7 @@ def main():
     application.add_handler(CommandHandler("done", complete_task))
     application.add_handler(CommandHandler("snooze", snooze_task))
     application.add_handler(CommandHandler("reflect", weekly_reflect))
-    application.add_handler(CommandHandler("ai suggest", ai_suggest))
+    application.add_handler(CommandHandler("ai_suggest", ai_suggest))
     application.add_handler(CommandHandler("plan", plan_goal))
     application.add_handler(CommandHandler("assist", assist_task))
     application.add_handler(CommandHandler("reschedule", reschedule_task))

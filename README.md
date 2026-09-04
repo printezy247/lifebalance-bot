@@ -9,7 +9,7 @@ A Telegram bot designed to help maintain work and life balance through task mana
 - **Task Completion**: Mark tasks as done (/done)
 - **Snooze**: Delay tasks by 30 minutes (/snooze)
 - **AI Planning**: Break down goals into actionable steps (/plan)
-- **AI Suggestions**: Get personalized task suggestions (/ai suggest)
+- **AI Suggestions**: Get personalized task suggestions (/ai_suggest)
 - **Assistance**: Get coaching tips mid-task (/assist)
 - **Weekly Reflection**: Reflect on past week and plan ahead (/reflect)
 - **Rescheduling**: Change task times (/reschedule)
@@ -59,7 +59,7 @@ Example usage:
 - `/done <task_id>` - Mark task as complete
 - `/snooze <task_id>` - Delay task by 30 minutes
 - `/plan [goal] [category]` - Get AI-generated plan for a goal
-- `/ai suggest` - Get AI-powered task suggestion
+- `/ai_suggest` - Get AI-powered task suggestion
 - `/assist [task_id]` - Get coaching tip mid-task
 - `/reflect` - Weekly reflection (runs every Sunday)
 - `/reschedule <task_id> <new time>` - Reschedule a task
