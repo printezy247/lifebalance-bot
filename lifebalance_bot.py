@@ -230,7 +230,7 @@ async def complete_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_data(data)
     
     await update.message.reply_text(
-        f"🎉 Completed: \"{task['text']}! \n\n"
+        f"🎉 Completed: \"{task['text']}\"! \n\n"
         f"Quick reflection (reply with 1-5 or skip):\n"
         f"1. How energizing was this? (1=draining, 5=energizing)\n"
         f"2. One thing that helped/hindered? (Optional)\n\n"
