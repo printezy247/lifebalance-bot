@@ -1,0 +1,100 @@
+<svg width="900" height="420" viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="featGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#667eea"/>
+      <stop offset="100%" stop-color="#764ba2"/>
+    </linearGradient>
+    <linearGradient id="featGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f093fb"/>
+      <stop offset="100%" stop-color="#f5576c"/>
+    </linearGradient>
+    <linearGradient id="featGrad3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4facfe"/>
+      <stop offset="100%" stop-color="#00f2fe"/>
+    </linearGradient>
+    <linearGradient id="featGrad4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#43e97b"/>
+      <stop offset="100%" stop-color="#38f9d7"/>
+    </linearGradient>
+    <linearGradient id="featGrad5" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fa709a"/>
+      <stop offset="100%" stop-color="#fee140"/>
+    </linearGradient>
+    <filter id="featGlow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Feature 1: Tap-to-Act Tasks -->
+  <g transform="translate(30, 20)" filter="url(#featGlow)">
+    <rect x="0" y="0" width="260" height="180" rx="16" fill="url(#featGrad1)" opacity="0.15" stroke="url(#featGrad1)" stroke-width="1.5"/>
+    <circle cx="130" cy="50" r="35" fill="url(#featGrad1)" opacity="0.2">
+      <animate attributeName="r" values="32;38;32" dur="3s" repeatCount="indefinite"/>
+    </circle>
+    <text x="130" y="55" text-anchor="middle" font-size="28">📋</text>
+    <text x="130" y="105" text-anchor="middle" fill="#e2e8f0" font-family="Segoe UI" font-weight="700" font-size="14">Tap-to-Act Tasks</text>
+    <text x="130" y="125" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI" font-size="10">/today shows buttons<br/>Done · Snooze · Coach · Reschedule</text>
+    <text x="130" y="155" text-anchor="middle" fill="#667eea" font-family="Segoe UI" font-weight="600" font-size="9">Persistent keyboard • Natural time parsing</text>
+  </g>
+
+  <!-- Feature 2: AI Coaching -->
+  <g transform="translate(320, 20)" filter="url(#featGlow)">
+    <rect x="0" y="0" width="260" height="180" rx="16" fill="url(#featGrad2)" opacity="0.15" stroke="url(#featGrad2)" stroke-width="1.5"/>
+    <circle cx="130" cy="50" r="35" fill="url(#featGrad2)" opacity="0.2">
+      <animate attributeName="r" values="32;38;32" dur="3.5s" repeatCount="indefinite"/>
+    </circle>
+    <text x="130" y="55" text-anchor="middle" font-size="28">🤖</text>
+    <text x="130" y="105" text-anchor="middle" fill="#e2e8f0" font-family="Segoe UI" font-weight="700" font-size="14">AI Coaching</text>
+    <text x="130" y="125" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI" font-size="10">/suggest · /plan · /assist<br/>Energy-weighted suggestions</text>
+    <text x="130" y="155" text-anchor="middle" fill="#f093fb" font-family="Segoe UI" font-weight="600" font-size="9">OpenAI-compatible • Any endpoint</text>
+  </g>
+
+  <!-- Feature 3: Focus Timer -->
+  <g transform="translate(610, 20)" filter="url(#featGlow)">
+    <rect x="0" y="0" width="260" height="180" rx="16" fill="url(#featGrad3)" opacity="0.15" stroke="url(#featGrad3)" stroke-width="1.5"/>
+    <circle cx="130" cy="50" r="35" fill="url(#featGrad3)" opacity="0.2">
+      <animate attributeName="r" values="32;38;32" dur="2.5s" repeatCount="indefinite"/>
+    </circle>
+    <text x="130" y="55" text-anchor="middle" font-size="28">⏱️</text>
+    <text x="130" y="105" text-anchor="middle" fill="#e2e8f0" font-family="Segoe UI" font-weight="700" font-size="14">Focus Timer</text>
+    <text x="130" y="125" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI" font-size="10">/focus [min] [label]<br/>Pomodoro-style blocks</text>
+    <text x="130" y="155" text-anchor="middle" fill="#4facfe" font-family="Segoe UI" font-weight="600" font-size="9">Configurable defaults • Stop anytime</text>
+  </g>
+
+  <!-- Feature 4: Auto Insights -->
+  <g transform="translate(30, 230)" filter="url(#featGlow)">
+    <rect x="0" y="0" width="260" height="170" rx="16" fill="url(#featGrad4)" opacity="0.15" stroke="url(#featGrad4)" stroke-width="1.5"/>
+    <circle cx="130" cy="45" r="35" fill="url(#featGrad4)" opacity="0.2">
+      <animate attributeName="r" values="32;38;32" dur="4s" repeatCount="indefinite"/>
+    </circle>
+    <text x="130" y="50" text-anchor="middle" font-size="28">📊</text>
+    <text x="130" y="100" text-anchor="middle" fill="#e2e8f0" font-family="Segoe UI" font-weight="700" font-size="14">Auto Insights</text>
+    <text x="130" y="120" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI" font-size="10">Balance • Burnout • Neglect<br/>Fires only after thresholds met</text>
+    <text x="130" y="150" text-anchor="middle" fill="#43e97b" font-family="Segoe UI" font-weight="600" font-size="9">Silent first week • Data-driven</text>
+  </g>
+
+  <!-- Feature 5: Smart Scheduling -->
+  <g transform="translate(320, 230)" filter="url(#featGlow)">
+    <rect x="0" y="0" width="260" height="170" rx="16" fill="url(#featGrad5)" opacity="0.15" stroke="url(#featGrad5)" stroke-width="1.5"/>
+    <circle cx="130" cy="45" r="35" fill="url(#featGrad5)" opacity="0.2">
+      <animate attributeName="r" values="32;38;32" dur="3.2s" repeatCount="indefinite"/>
+    </circle>
+    <text x="130" y="50" text-anchor="middle" font-size="28">⏰</text>
+    <text x="130" y="100" text-anchor="middle" fill="#e2e8f0" font-family="Segoe UI" font-weight="700" font-size="14">Smart Scheduling</text>
+    <text x="130" y="120" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI" font-size="10">Briefing • Wind-down • Digest<br/>Quiet-hour aware • Per-user</text>
+    <text x="130" y="150" text-anchor="middle" fill="#fa709a" font-family="Segoe UI" font-weight="600" font-size="9">Preview commands • Timezone-aware</text>
+  </g>
+
+  <!-- Feature 6: Data Ownership -->
+  <g transform="translate(610, 230)" filter="url(#featGlow)">
+    <rect x="0" y="0" width="260" height="170" rx="16" fill="#ffd89b" opacity="0.15" stroke="#ffd89b" stroke-width="1.5"/>
+    <circle cx="130" cy="45" r="35" fill="#ffd89b" opacity="0.2">
+      <animate attributeName="r" values="32;38;32" dur="3.8s" repeatCount="indefinite"/>
+    </circle>
+    <text x="130" y="50" text-anchor="middle" font-size="28">🔒</text>
+    <text x="130" y="100" text-anchor="middle" fill="#e2e8f0" font-family="Segoe UI" font-weight="700" font-size="14">Data Ownership</text>
+    <text x="130" y="120" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI" font-size="10">Single JSON + atomic writes<br/>Daily encrypted backups</text>
+    <text x="130" y="150" text-anchor="middle" fill="#ffd89b" font-family="Segoe UI" font-weight="600" font-size="9">Git-ignored • One-file restore</text>
+  </g>
+</svg>

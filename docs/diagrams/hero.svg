@@ -1,0 +1,81 @@
+<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="lifeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#667eea">
+        <animate attributeName="stop-color" values="#667eea;#764ba2;#f093fb;#f5576c;#667eea" dur="6s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" stop-color="#764ba2">
+        <animate attributeName="stop-color" values="#764ba2;#f093fb;#f5576c;#667eea;#764ba2" dur="6s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4facfe"/>
+      <stop offset="100%" stop-color="#00f2fe"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Outer rotating rings -->
+  <g transform="translate(120, 120)">
+    <ellipse rx="100" ry="25" fill="none" stroke="url(#ringGrad)" stroke-width="1.5" opacity="0.4" stroke-dasharray="8 4">
+      <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="20s" repeatCount="indefinite"/>
+    </ellipse>
+    <ellipse rx="80" ry="20" fill="none" stroke="url(#ringGrad)" stroke-width="1" opacity="0.3" stroke-dasharray="6 6">
+      <animateTransform attributeName="transform" type="rotate" from="360" to="0" dur="15s" repeatCount="indefinite"/>
+    </ellipse>
+    <ellipse rx="60" ry="15" fill="none" stroke="url(#ringGrad)" stroke-width="0.8" opacity="0.2" stroke-dasharray="4 8">
+      <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="12s" repeatCount="indefinite"/>
+    </ellipse>
+  </g>
+  
+  <!-- Floating particles -->
+  <g transform="translate(120, 120)">
+    <circle r="3" fill="#4facfe" opacity="0.8">
+      <animate attributeName="cx" values="0;80;0;-80;0" dur="8s" repeatCount="indefinite"/>
+      <animate attributeName="cy" values="-80;0;80;0;-80" dur="8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.3;0.9;0.3;0.9;0.3" dur="8s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="2.5" fill="#f093fb" opacity="0.7">
+      <animate attributeName="cx" values="0;-70;0;70;0" dur="10s" repeatCount="indefinite"/>
+      <animate attributeName="cy" values="70;0;-70;0;70" dur="10s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.2;0.8;0.2;0.8;0.2" dur="10s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="2" fill="#00f2fe" opacity="0.6">
+      <animate attributeName="cx" values="0;60;0;-60;0" dur="7s" repeatCount="indefinite"/>
+      <animate attributeName="cy" values="-60;0;60;0;-60" dur="7s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.4;1;0.4;1;0.4" dur="7s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+  
+  <!-- Central pulsing orb -->
+  <circle cx="120" cy="120" r="50" fill="url(#lifeGrad)" filter="url(#glow)">
+    <animate attributeName="r" values="45;55;45" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;1;0.8" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- Inner core -->
+  <circle cx="120" cy="120" r="28" fill="#ffffff" opacity="0.15">
+    <animate attributeName="r" values="25;32;25" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- Balance symbol -->
+  <g transform="translate(120, 120)">
+    <path d="M0 -20 L0 20 M-15 -5 L15 -5 M-10 5 L10 5 M-5 15 L5 15" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.9">
+      <animate attributeName="stroke-dashoffset" values="0;20;0" dur="4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.7;1;0.7" dur="4s" repeatCount="indefinite"/>
+    </path>
+  </g>
+</svg>

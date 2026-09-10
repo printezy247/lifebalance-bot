@@ -1,0 +1,44 @@
+<svg width="800" height="180" viewBox="0 0 800 180" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="archGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#667eea"/>
+      <stop offset="50%" stop-color="#764ba2"/>
+      <stop offset="100%" stop-color="#f093fb"/>
+    </linearGradient>
+    <filter id="archGlow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  
+  <rect x="10" y="10" width="780" height="160" rx="16" fill="#0a0e1a" stroke="url(#archGrad)" stroke-width="1.5"/>
+  <text x="400" y="38" text-anchor="middle" fill="url(#archGrad)" font-family="Segoe UI" font-weight="800" font-size="16">🏗️ TECHNICAL ARCHITECTURE</text>
+  
+  <g font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#e2e8f0">
+    <!-- Row 1 -->
+    <text x="80" y="75" text-anchor="middle" font-weight="600" fill="#4facfe">📦</text>
+    <text x="80" y="90" text-anchor="middle" font-weight="600">Single Process</text>
+    <text x="80" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">Long-polling worker</text>
+    <text x="80" y="120" text-anchor="middle" fill="#4facfe" font-size="8">No webhook needed</text>
+    
+    <text x="240" y="75" text-anchor="middle" font-weight="600" fill="#f093fb">🧵</text>
+    <text x="240" y="90" text-anchor="middle" font-weight="600">Thread-Safe</text>
+    <text x="240" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">RLock + atomic writes</text>
+    <text x="240" y="120" text-anchor="middle" fill="#f093fb" font-size="8">temp file + os.replace</text>
+    
+    <text x="400" y="75" text-anchor="middle" font-weight="600" fill="#43e97b">⏰</text>
+    <text x="400" y="90" text-anchor="middle" font-weight="600">APScheduler</text>
+    <text x="400" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">Timezone-aware jobs</text>
+    <text x="400" y="120" text-anchor="middle" fill="#43e97b" font-size="8">Cron + interval triggers</text>
+    
+    <text x="560" y="75" text-anchor="middle" font-weight="600" fill="#fee140">🤖</text>
+    <text x="560" y="90" text-anchor="middle" font-weight="600">AI Layer</text>
+    <text x="560" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">OpenAI-compatible</text>
+    <text x="560" y="120" text-anchor="middle" fill="#fee140" font-size="8">Pluggable endpoint</text>
+    
+    <text x="720" y="75" text-anchor="middle" font-weight="600" fill="#fa709a">🔒</text>
+    <text x="720" y="90" text-anchor="middle" font-weight="600">Privacy First</text>
+    <text x="720" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">Local JSON only</text>
+    <text x="720" y="120" text-anchor="middle" fill="#fa709a" font-size="8">No external DB</text>
+  </g>
+</svg>

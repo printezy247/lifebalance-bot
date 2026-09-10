@@ -1,0 +1,46 @@
+<svg width="900" height="200" viewBox="0 0 900 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="autoGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#667eea"/>
+      <stop offset="50%" stop-color="#764ba2"/>
+      <stop offset="100%" stop-color="#f093fb"/>
+    </linearGradient>
+  </defs>
+  
+  <rect x="10" y="10" width="880" height="180" rx="16" fill="#0a0e1a" stroke="url(#autoGrad)" stroke-width="1.5"/>
+  
+  <text x="450" y="40" text-anchor="middle" fill="url(#autoGrad)" font-family="Segoe UI" font-weight="800" font-size="18">⚙️ AUTOMATED WORKFLOWS</text>
+  
+  <!-- Automation items -->
+  <g font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#e2e8f0">
+    <text x="60" y="75" text-anchor="middle" font-weight="600" fill="#4facfe">🔔</text>
+    <text x="60" y="90" text-anchor="middle" font-weight="600">Task Reminder</text>
+    <text x="60" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">10 min before</text>
+    <text x="60" y="120" text-anchor="middle" fill="#00ffa3" font-size="8">Exempt from quiet hours</text>
+    
+    <text x="220" y="75" text-anchor="middle" font-weight="600" fill="#f093fb">⚠️</text>
+    <text x="220" y="90" text-anchor="middle" font-weight="600">Overdue Nudge</text>
+    <text x="220" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">30 min after due</text>
+    <text x="220" y="120" text-anchor="middle" fill="#fa709a" font-size="8">Fires once per task</text>
+    
+    <text x="380" y="75" text-anchor="middle" font-weight="600" fill="#43e97b">🌅</text>
+    <text x="380" y="90" text-anchor="middle" font-weight="600">Morning Briefing</text>
+    <text x="380" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">07:00 daily</text>
+    <text x="380" y="120" text-anchor="middle" fill="#43e97b" font-size="8">Tasks + streak + focus</text>
+    
+    <text x="540" y="75" text-anchor="middle" font-weight="600" fill="#fee140">🌙</text>
+    <text x="540" y="90" text-anchor="middle" font-weight="600">Evening Wind-down</text>
+    <text x="540" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">21:00 daily</text>
+    <text x="540" y="120" text-anchor="middle" fill="#fee140" font-size="8">Recap + roll forward</text>
+    
+    <text x="700" y="75" text-anchor="middle" font-weight="600" fill="#667eea">📅</text>
+    <text x="700" y="90" text-anchor="middle" font-weight="600">Weekly Digest</text>
+    <text x="700" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">Sun 19:00</text>
+    <text x="700" y="120" text-anchor="middle" fill="#667eea" font-size="8">Stats + reflection</text>
+    
+    <text x="860" y="75" text-anchor="middle" font-weight="600" fill="#fa709a">💾</text>
+    <text x="860" y="90" text-anchor="middle" font-weight="600">Auto Backup</text>
+    <text x="860" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">03:00 daily</text>
+    <text x="860" y="120" text-anchor="middle" fill="#fa709a" font-size="8">Keep 14 snapshots</text>
+  </g>
+</svg>
