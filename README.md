@@ -1,325 +1,630 @@
 # LifeBalance Bot
 
-A Telegram bot for keeping work and life in balance. It manages tasks, reminds
-you proactively, and watches whether one area of your life is quietly crowding
-out the rest.
+<div align="center">
+  <svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="lifeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#667eea">
+          <animate attributeName="stop-color" values="#667eea;#764ba2;#f093fb;#f5576c;#667eea" dur="6s" repeatCount="indefinite"/>
+        </stop>
+        <stop offset="100%" stop-color="#764ba2">
+          <animate attributeName="stop-color" values="#764ba2;#f093fb;#f5576c;#667eea;#764ba2" dur="6s" repeatCount="indefinite"/>
+        </stop>
+      </linearGradient>
+      <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#4facfe"/>
+        <stop offset="100%" stop-color="#00f2fe"/>
+      </linearGradient>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="4" result="blur"/>
+        <feMerge>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+      <filter id="softGlow">
+        <feGaussianBlur stdDeviation="2" result="blur"/>
+        <feMerge>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
+    
+    <!-- Outer rotating rings -->
+    <g transform="translate(120, 120)">
+      <ellipse rx="100" ry="25" fill="none" stroke="url(#ringGrad)" stroke-width="1.5" opacity="0.4" stroke-dasharray="8 4">
+        <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="20s" repeatCount="indefinite"/>
+      </ellipse>
+      <ellipse rx="80" ry="20" fill="none" stroke="url(#ringGrad)" stroke-width="1" opacity="0.3" stroke-dasharray="6 6">
+        <animateTransform attributeName="transform" type="rotate" from="360" to="0" dur="15s" repeatCount="indefinite"/>
+      </ellipse>
+      <ellipse rx="60" ry="15" fill="none" stroke="url(#ringGrad)" stroke-width="0.8" opacity="0.2" stroke-dasharray="4 8">
+        <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="12s" repeatCount="indefinite"/>
+      </ellipse>
+    </g>
+    
+    <!-- Floating particles -->
+    <g transform="translate(120, 120)">
+      <circle r="3" fill="#4facfe" opacity="0.8">
+        <animate attributeName="cx" values="0;80;0;-80;0" dur="8s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="-80;0;80;0;-80" dur="8s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.3;0.9;0.3;0.9;0.3" dur="8s" repeatCount="indefinite"/>
+      </circle>
+      <circle r="2.5" fill="#f093fb" opacity="0.7">
+        <animate attributeName="cx" values="0;-70;0;70;0" dur="10s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="70;0;-70;0;70" dur="10s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.2;0.8;0.2;0.8;0.2" dur="10s" repeatCount="indefinite"/>
+      </circle>
+      <circle r="2" fill="#00f2fe" opacity="0.6">
+        <animate attributeName="cx" values="0;60;0;-60;0" dur="7s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="-60;0;60;0;-60" dur="7s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.4;1;0.4;1;0.4" dur="7s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+    
+    <!-- Central pulsing orb -->
+    <circle cx="120" cy="120" r="50" fill="url(#lifeGrad)" filter="url(#glow)">
+      <animate attributeName="r" values="45;55;45" dur="3s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.8;1;0.8" dur="3s" repeatCount="indefinite"/>
+    </circle>
+    
+    <!-- Inner core -->
+    <circle cx="120" cy="120" r="28" fill="#ffffff" opacity="0.15">
+      <animate attributeName="r" values="25;32;25" dur="3s" repeatCount="indefinite"/>
+    </circle>
+    
+    <!-- Balance symbol -->
+    <g transform="translate(120, 120)">
+      <path d="M0 -20 L0 20 M-15 -5 L15 -5 M-10 5 L10 5 M-5 15 L5 15" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.9">
+        <animate attributeName="stroke-dashoffset" values="0;20;0" dur="4s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.7;1;0.7" dur="4s" repeatCount="indefinite"/>
+      </path>
+    </g>
+  </svg>
 
-Built with [python-telegram-bot](https://python-telegram-bot.org/) 21.x, deployed
-on Railway.
+  <h1>🌿 LifeBalance Bot</h1>
+  <p><strong>Tap, don't type. Balance work & life effortlessly.</strong></p>
+  <p>Your intelligent Telegram companion for task management, focus sessions, AI coaching & life insights.</p>
+</div>
+
+<!-- Animated wave separator -->
+<svg viewBox="0 0 1200 120" preserveAspectRatio="none" style="width:100%;height:60px;display:block;margin:-10px 0;">
+  <defs>
+    <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#667eea"/>
+      <stop offset="50%" stop-color="#f093fb"/>
+      <stop offset="100%" stop-color="#4facfe"/>
+    </linearGradient>
+  </defs>
+  <path d="M0 60 Q 300 100 600 60 T 1200 60 V120 H0 Z" fill="url(#waveGrad)" opacity="0.3">
+    <animate attributeName="d" dur="8s" repeatCount="indefinite"
+      values="M0 60 Q 300 100 600 60 T 1200 60 V120 H0 Z;
+              M0 40 Q 300 80 600 40 T 1200 40 V120 H0 Z;
+              M0 60 Q 300 100 600 60 T 1200 60 V120 H0 Z" />
+  </path>
+</svg>
+
+<div align="center">
+  
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![python-telegram-bot](https://img.shields.io/badge/python--telegram--bot-21.0-0088CC?style=for-the-badge&logo=telegram&logoColor=white)](https://github.com/python-telegram-bot/python-telegram-bot)
+[![APScheduler](https://img.shields.io/badge/APScheduler-3.10-009688?style=for-the-badge)](https://apscheduler.readthedocs.io)
+[![Railway](https://img.shields.io/badge/Deploy%20on-Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://railway.app)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/printezy247/lifebalance-bot?style=for-the-badge&logo=github&logoColor=white)](https://github.com/printezy247/lifebalance-bot/stargazers)
+[![Forks](https://img.shields.io/github/forks/printezy247/lifebalance-bot?style=for-the-badge&logo=github&logoColor=white)](https://github.com/printezy247/lifebalance-bot/network/members)
+[![Issues](https://img.shields.io/github/issues/printezy247/lifebalance-bot?style=for-the-badge&logo=github&logoColor=white)](https://github.com/printezy247/lifebalance-bot/issues)
+
+</div>
 
 ---
 
-## What it does
+## ✨ The Promise
 
-**Tap, don't type.** `/today` lists your tasks as buttons. Tap one to open it,
-then Done / Snooze / Coach me / Reschedule. A persistent keyboard sits under the
-message box so there is nothing to memorise.
-
-**It comes to you.** A morning briefing, an evening wind-down with one-tap
-rollover of anything unfinished, overdue nudges, and a Sunday digest. All of it
-silenced during quiet hours, all of it toggleable from `/settings`.
-
-**It notices patterns.** Once there is enough history, it will tell you when 60%
-of your completed work is one category, when your energy ratings are trending
-low, or when `family` has gone quiet for ten days.
+<div align="center">
+  <svg width="800" height="200" viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="promiseGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#667eea"/>
+        <stop offset="50%" stop-color="#764ba2"/>
+        <stop offset="100%" stop-color="#f093fb"/>
+      </linearGradient>
+      <filter id="cardGlow">
+        <feGaussianBlur stdDeviation="6" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="textGlow">
+        <feGaussianBlur stdDeviation="2" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    
+    <!-- Background cards -->
+    <rect x="20" y="20" width="760" height="160" rx="24" fill="#0a0e1a" stroke="url(#promiseGrad)" stroke-width="2" filter="url(#cardGlow)" opacity="0.9"/>
+    
+    <!-- Animated top bar -->
+    <rect x="20" y="20" width="760" height="4" rx="2" fill="url(#promiseGrad)">
+      <animate attributeName="opacity" values="0.6;1;0.6" dur="2s" repeatCount="indefinite"/>
+    </rect>
+    
+    <!-- Title -->
+    <text x="400" y="70" text-anchor="middle" fill="url(#promiseGrad)" font-family="Segoe UI, system-ui, sans-serif" font-weight="800" font-size="28" filter="url(#textGlow)">⚡ ONE BOT · ZERO FRICTION · INSTANT BALANCE</text>
+    
+    <!-- Pillars -->
+    <g font-family="Segoe UI, system-ui, sans-serif" font-size="11" fill="#e2e8f0">
+      <text x="80" y="115" text-anchor="middle" font-weight="600">🎯 Tap-to-Act</text>
+      <text x="80" y="130" text-anchor="middle" fill="#94a3b8" font-size="9">Buttons, not commands</text>
+      
+      <text x="240" y="115" text-anchor="middle" font-weight="600">🤖 AI Coach</text>
+      <text x="240" y="130" text-anchor="middle" fill="#94a3b8" font-size="9">Smart suggestions</text>
+      
+      <text x="400" y="115" text-anchor="middle" font-weight="600">📊 Auto Insights</text>
+      <text x="400" y="130" text-anchor="middle" fill="#94a3b8" font-size="9">Pattern detection</text>
+      
+      <text x="560" y="115" text-anchor="middle" font-weight="600">⏰ Smart Reminders</text>
+      <text x="560" y="130" text-anchor="middle" fill="#94a3b8" font-size="9">Quiet-hour aware</text>
+      
+      <text x="720" y="115" text-anchor="middle" font-weight="600">🔒 Local-First</text>
+      <text x="720" y="130" text-anchor="middle" fill="#94a3b8" font-size="9">Your data, your control</text>
+    </g>
+    
+    <!-- Pulsing indicator -->
+    <circle cx="400" cy="35" r="5" fill="#00ffa3">
+      <animate attributeName="r" values="5;9;5" dur="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;0.4;1" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+    <text x="400" y="48" text-anchor="middle" fill="#00ffa3" font-family="Segoe UI" font-weight="700" font-size="9">LIVE</text>
+  </svg>
+</div>
 
 ---
 
-## Commands
+## 🚀 Quick Start
 
-### Basics
+### Zero-Config Deploy (Railway)
+
+```bash
+# 1. Fork this repo
+# 2. New Project → Deploy from GitHub → Select lifebalance-bot
+# 3. Add Volume: mount path /data
+# 4. Set env vars (see below)
+# 5. Deploy → Done!
+```
+
+**Required:** `BOT_TOKEN` (from [@BotFather](https://t.me/BotFather))  
+**Strongly recommended:** `DATA_DIR=/data`, `BOT_TZ=Asia/Kuala_Lumpur`  
+**Optional AI:** `HF_TOKEN`, `AI_MODEL=meta-llama/Llama-3.1-8B-Instruct`
+
+<details>
+<summary><strong>📋 Full Environment Variables</strong></summary>
+
+| Variable | Default | Description |
+|---|---|---|
+| `BOT_TOKEN` | *required* | Telegram bot token |
+| `DATA_DIR` | `.` | **Must be a mounted volume** for persistence |
+| `BOT_TZ` | `UTC` | IANA timezone (e.g. `Asia/Kuala_Lumpur`) |
+| `HF_TOKEN` | — | HuggingFace token for AI features |
+| `AI_MODEL` | `meta-llama/Llama-3.1-8B-Instruct` | OpenAI-compatible model |
+| `AI_BASE_URL` | `https://router.huggingface.co/v1/chat/completions` | API endpoint |
+| `AI_TIMEOUT` | `45` | Request timeout (seconds) |
+| `QUIET_START` / `QUIET_END` | `22` / `7` | Quiet hours (0-23, equal = disabled) |
+| `BRIEFING_ENABLED` / `BRIEFING_HOUR` | `1` / `7` | Morning briefing toggle & hour |
+| `WINDDOWN_ENABLED` / `WINDDOWN_HOUR` | `1` / `21` | Evening wind-down toggle & hour |
+| `DIGEST_ENABLED` / `DIGEST_DAY` / `DIGEST_HOUR` | `1` / `0` / `19` | Weekly digest (Day 0=Sunday) |
+| `NUDGE_ENABLED` / `NUDGE_AFTER_MINUTES` | `1` / `30` | Overdue nudges |
+| `BACKUP_ENABLED` / `BACKUP_HOUR` / `BACKUP_KEEP` | `1` / `3` / `14` | Daily backups, retention |
+| `FOCUS_DEFAULT` / `FOCUS_MAX` | `25` / `180` | Focus timer defaults (minutes) |
+
+</details>
+
+---
+
+## ⚡ Core Features
+
+<div align="center">
+  <svg width="900" height="420" viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="featGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#667eea"/>
+        <stop offset="100%" stop-color="#764ba2"/>
+      </linearGradient>
+      <linearGradient id="featGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#f093fb"/>
+        <stop offset="100%" stop-color="#f5576c"/>
+      </linearGradient>
+      <linearGradient id="featGrad3" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#4facfe"/>
+        <stop offset="100%" stop-color="#00f2fe"/>
+      </linearGradient>
+      <linearGradient id="featGrad4" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#43e97b"/>
+        <stop offset="100%" stop-color="#38f9d7"/>
+      </linearGradient>
+      <linearGradient id="featGrad5" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#fa709a"/>
+        <stop offset="100%" stop-color="#fee140"/>
+      </linearGradient>
+      <filter id="featGlow">
+        <feGaussianBlur stdDeviation="4" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+
+    <!-- Feature 1: Tap-to-Act Tasks -->
+    <g transform="translate(30, 20)" filter="url(#featGlow)">
+      <rect x="0" y="0" width="260" height="180" rx="16" fill="url(#featGrad1)" opacity="0.15" stroke="url(#featGrad1)" stroke-width="1.5"/>
+      <circle cx="130" cy="50" r="35" fill="url(#featGrad1)" opacity="0.2">
+        <animate attributeName="r" values="32;38;32" dur="3s" repeatCount="indefinite"/>
+      </circle>
+      <text x="130" y="55" text-anchor="middle" font-size="28">📋</text>
+      <text x="130" y="105" text-anchor="middle" fill="#e2e8f0" font-family="Segoe UI" font-weight="700" font-size="14">Tap-to-Act Tasks</text>
+      <text x="130" y="125" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI" font-size="10">/today shows buttons<br/>Done · Snooze · Coach · Reschedule</text>
+      <text x="130" y="155" text-anchor="middle" fill="#667eea" font-family="Segoe UI" font-weight="600" font-size="9">Persistent keyboard • Natural time parsing</text>
+    </g>
+
+    <!-- Feature 2: AI Coaching -->
+    <g transform="translate(320, 20)" filter="url(#featGlow)">
+      <rect x="0" y="0" width="260" height="180" rx="16" fill="url(#featGrad2)" opacity="0.15" stroke="url(#featGrad2)" stroke-width="1.5"/>
+      <circle cx="130" cy="50" r="35" fill="url(#featGrad2)" opacity="0.2">
+        <animate attributeName="r" values="32;38;32" dur="3.5s" repeatCount="indefinite"/>
+      </circle>
+      <text x="130" y="55" text-anchor="middle" font-size="28">🤖</text>
+      <text x="130" y="105" text-anchor="middle" fill="#e2e8f0" font-family="Segoe UI" font-weight="700" font-size="14">AI Coaching</text>
+      <text x="130" y="125" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI" font-size="10">/suggest · /plan · /assist<br/>Energy-weighted suggestions</text>
+      <text x="130" y="155" text-anchor="middle" fill="#f093fb" font-family="Segoe UI" font-weight="600" font-size="9">OpenAI-compatible • Any endpoint</text>
+    </g>
+
+    <!-- Feature 3: Focus Timer -->
+    <g transform="translate(610, 20)" filter="url(#featGlow)">
+      <rect x="0" y="0" width="260" height="180" rx="16" fill="url(#featGrad3)" opacity="0.15" stroke="url(#featGrad3)" stroke-width="1.5"/>
+      <circle cx="130" cy="50" r="35" fill="url(#featGrad3)" opacity="0.2">
+        <animate attributeName="r" values="32;38;32" dur="2.5s" repeatCount="indefinite"/>
+      </circle>
+      <text x="130" y="55" text-anchor="middle" font-size="28">⏱️</text>
+      <text x="130" y="105" text-anchor="middle" fill="#e2e8f0" font-family="Segoe UI" font-weight="700" font-size="14">Focus Timer</text>
+      <text x="130" y="125" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI" font-size="10">/focus [min] [label]<br/>Pomodoro-style blocks</text>
+      <text x="130" y="155" text-anchor="middle" fill="#4facfe" font-family="Segoe UI" font-weight="600" font-size="9">Configurable defaults • Stop anytime</text>
+    </g>
+
+    <!-- Feature 4: Auto Insights -->
+    <g transform="translate(30, 230)" filter="url(#featGlow)">
+      <rect x="0" y="0" width="260" height="170" rx="16" fill="url(#featGrad4)" opacity="0.15" stroke="url(#featGrad4)" stroke-width="1.5"/>
+      <circle cx="130" cy="45" r="35" fill="url(#featGrad4)" opacity="0.2">
+        <animate attributeName="r" values="32;38;32" dur="4s" repeatCount="indefinite"/>
+      </circle>
+      <text x="130" y="50" text-anchor="middle" font-size="28">📊</text>
+      <text x="130" y="100" text-anchor="middle" fill="#e2e8f0" font-family="Segoe UI" font-weight="700" font-size="14">Auto Insights</text>
+      <text x="130" y="120" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI" font-size="10">Balance • Burnout • Neglect<br/>Fires only after thresholds met</text>
+      <text x="130" y="150" text-anchor="middle" fill="#43e97b" font-family="Segoe UI" font-weight="600" font-size="9">Silent first week • Data-driven</text>
+    </g>
+
+    <!-- Feature 5: Smart Scheduling -->
+    <g transform="translate(320, 230)" filter="url(#featGlow)">
+      <rect x="0" y="0" width="260" height="170" rx="16" fill="url(#featGrad5)" opacity="0.15" stroke="url(#featGrad5)" stroke-width="1.5"/>
+      <circle cx="130" cy="45" r="35" fill="url(#featGrad5)" opacity="0.2">
+        <animate attributeName="r" values="32;38;32" dur="3.2s" repeatCount="indefinite"/>
+      </circle>
+      <text x="130" y="50" text-anchor="middle" font-size="28">⏰</text>
+      <text x="130" y="100" text-anchor="middle" fill="#e2e8f0" font-family="Segoe UI" font-weight="700" font-size="14">Smart Scheduling</text>
+      <text x="130" y="120" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI" font-size="10">Briefing • Wind-down • Digest<br/>Quiet-hour aware • Per-user</text>
+      <text x="130" y="150" text-anchor="middle" fill="#fa709a" font-family="Segoe UI" font-weight="600" font-size="9">Preview commands • Timezone-aware</text>
+    </g>
+
+    <!-- Feature 6: Data Ownership -->
+    <g transform="translate(610, 230)" filter="url(#featGlow)">
+      <rect x="0" y="0" width="260" height="170" rx="16" fill="#ffd89b" opacity="0.15" stroke="#ffd89b" stroke-width="1.5"/>
+      <circle cx="130" cy="45" r="35" fill="#ffd89b" opacity="0.2">
+        <animate attributeName="r" values="32;38;32" dur="3.8s" repeatCount="indefinite"/>
+      </circle>
+      <text x="130" y="50" text-anchor="middle" font-size="28">🔒</text>
+      <text x="130" y="100" text-anchor="middle" fill="#e2e8f0" font-family="Segoe UI" font-weight="700" font-size="14">Data Ownership</text>
+      <text x="130" y="120" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI" font-size="10">Single JSON + atomic writes<br/>Daily encrypted backups</text>
+      <text x="130" y="150" text-anchor="middle" fill="#ffd89b" font-family="Segoe UI" font-weight="600" font-size="9">Git-ignored • One-file restore</text>
+    </g>
+  </svg>
+</div>
+
+---
+
+## 📋 Command Reference
+
+<details open>
+<summary><strong>🎯 Basics</strong></summary>
+
 | Command | Description |
 |---|---|
-| `/start` | Welcome message, sets up the persistent keyboard |
-| `/help` | Every command, plus your current schedule and timezone |
+| `/start` | Welcome + persistent keyboard |
+| `/help` | All commands, schedule, timezone |
 
-### Tasks
+</details>
+
+<details>
+<summary><strong>📝 Tasks</strong></summary>
+
+| Command | Description | Example |
+|---|---|---|
+| `/add <task> <time> [cat]` | Add task | `/add Call mom 3:30pm family` |
+| `/today` | Today's tasks as buttons | — |
+| `/week` | Weekly progress bars + streak | — |
+| `/done <id>` | Complete + rate energy 1-5 | `/done 3` |
+| `/snooze <id>` | Delay 30 minutes | `/snooze 3` |
+| `/reschedule <id> <time>` | Move task | `/reschedule 3 tomorrow 9am` |
+
+**Time formats:** `3pm`, `3:30pm`, `15:00`, `tomorrow`, `tomorrow 9am`  
+**Categories:** `family` `trading` `marketing` `content` `learning` `health` `admin` `general`
+
+</details>
+
+<details>
+<summary><strong>⏱️ Focus</strong></summary>
+
 | Command | Description |
 |---|---|
-| `/add <task> <time> [category]` | Add a task. `/add Pick up kids 3:30pm family` |
-| `/today` | Today's tasks with tap-to-act buttons |
-| `/week` | Weekly progress bars, per category, plus streak |
-| `/done <id>` | Mark complete, then rate energy 1-5 with one tap |
-| `/snooze <id>` | Delay 30 minutes |
-| `/reschedule <id> <time>` | Move to a new time |
-
-Accepted time formats: `3pm`, `3:30pm`, `15:00`, `tomorrow`, `tomorrow 9am`
-
-Categories: `family` `trading` `marketing` `content` `learning` `health`
-`admin` `general`
-
-### Focus
-| Command | Description |
-|---|---|
-| `/focus` | Start a timer using `FOCUS_DEFAULT` minutes |
+| `/focus` | Start timer (default minutes) |
 | `/focus 50` | 50-minute block |
-| `/focus 50 deep work` | With a label |
-| `/focus stop` | Cancel a running timer |
+| `/focus 50 deep work` | Timer with label |
+| `/focus stop` | Cancel running timer |
 
-### AI
+</details>
+
+<details>
+<summary><strong>🤖 AI</strong></summary>
+
 | Command | Description |
 |---|---|
-| `/suggest` | A task suggestion, weighted by your recent energy ratings |
-| `/ai_suggest` | Alias for `/suggest`, kept for backward compatibility |
-| `/plan <goal> [category]` | Break a goal into subtasks with estimates |
-| `/assist <id>` | Coaching tip for one task |
+| `/suggest` | Task suggestion (energy-weighted) |
+| `/ai_suggest` | Alias for backwards compat |
+| `/plan <goal> [cat]` | Break goal into subtasks |
+| `/assist <id>` | Coaching tip for task |
 
-### Reflection and settings
+</details>
+
+<details>
+<summary><strong>🧠 Reflection & Settings</strong></summary>
+
 | Command | Description |
 |---|---|
-| `/reflect` | Pick an area and answer one focused question |
-| `/settings` | Toggle every automation, adjust quiet hours |
-| `/brief` | Preview the morning briefing now |
-| `/winddown` | Preview the evening wind-down now |
-| `/digest` | Preview the weekly digest now |
+| `/reflect` | Guided reflection prompt |
+| `/settings` | Toggle automations, quiet hours |
+| `/brief` | Preview morning briefing |
+| `/winddown` | Preview evening wind-down |
+| `/digest` | Preview weekly digest |
 
-The three preview commands exist so you can test the scheduled features
-immediately instead of waiting until 07:00 or Sunday. They reply directly and
-are not subject to quiet hours.
+</details>
 
 ---
 
-## Automations
+## 🔄 Automations
 
-| What | Default | Notes |
-|---|---|---|
-| Task reminder | 10 min before | **Exempt from quiet hours** — you scheduled it |
-| Overdue nudge | 30 min after due | Fires once per task, never repeats |
-| Morning briefing | 07:00 | Today's tasks, streak, what's up first |
-| Evening wind-down | 21:00 | Recap + "roll unfinished to tomorrow" button |
-| Weekly digest | Sunday 19:00 | Week stats + a reflection prompt |
-| Backup | 03:00 | Snapshot to `DATA_DIR/backups`, keeps 14 |
-| Quiet hours | 22:00-07:00 | Silences everything above except reminders |
-
-### Insights
-
-Balance, burnout and neglect warnings are folded into the wind-down and the
-weekly digest rather than sent as separate notifications, each with a cooldown.
-Every one refuses to speak until it has enough data to say something true:
-
-| Insight | Stays silent until |
-|---|---|
-| Balance | 8 completed tasks in 14 days, then fires if one category is 60%+ |
-| Burnout | 4 energy ratings in 7 days, then fires if the average is under 2.5 |
-| Neglect | A watched category has 10 days of silence |
-
-Expect quiet for the first week or two on a fresh install. That is intentional.
+<div align="center">
+  <svg width="900" height="200" viewBox="0 0 900 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="autoGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#667eea"/>
+        <stop offset="50%" stop-color="#764ba2"/>
+        <stop offset="100%" stop-color="#f093fb"/>
+      </linearGradient>
+    </defs>
+    
+    <rect x="10" y="10" width="880" height="180" rx="16" fill="#0a0e1a" stroke="url(#autoGrad)" stroke-width="1.5"/>
+    
+    <text x="450" y="40" text-anchor="middle" fill="url(#autoGrad)" font-family="Segoe UI" font-weight="800" font-size="18">⚙️ AUTOMATED WORKFLOWS</text>
+    
+    <!-- Automation items -->
+    <g font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#e2e8f0">
+      <text x="60" y="75" text-anchor="middle" font-weight="600" fill="#4facfe">🔔</text>
+      <text x="60" y="90" text-anchor="middle" font-weight="600">Task Reminder</text>
+      <text x="60" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">10 min before</text>
+      <text x="60" y="120" text-anchor="middle" fill="#00ffa3" font-size="8">Exempt from quiet hours</text>
+      
+      <text x="220" y="75" text-anchor="middle" font-weight="600" fill="#f093fb">⚠️</text>
+      <text x="220" y="90" text-anchor="middle" font-weight="600">Overdue Nudge</text>
+      <text x="220" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">30 min after due</text>
+      <text x="220" y="120" text-anchor="middle" fill="#fa709a" font-size="8">Fires once per task</text>
+      
+      <text x="380" y="75" text-anchor="middle" font-weight="600" fill="#43e97b">🌅</text>
+      <text x="380" y="90" text-anchor="middle" font-weight="600">Morning Briefing</text>
+      <text x="380" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">07:00 daily</text>
+      <text x="380" y="120" text-anchor="middle" fill="#43e97b" font-size="8">Tasks + streak + focus</text>
+      
+      <text x="540" y="75" text-anchor="middle" font-weight="600" fill="#fee140">🌙</text>
+      <text x="540" y="90" text-anchor="middle" font-weight="600">Evening Wind-down</text>
+      <text x="540" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">21:00 daily</text>
+      <text x="540" y="120" text-anchor="middle" fill="#fee140" font-size="8">Recap + roll forward</text>
+      
+      <text x="700" y="75" text-anchor="middle" font-weight="600" fill="#667eea">📅</text>
+      <text x="700" y="90" text-anchor="middle" font-weight="600">Weekly Digest</text>
+      <text x="700" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">Sun 19:00</text>
+      <text x="700" y="120" text-anchor="middle" fill="#667eea" font-size="8">Stats + reflection</text>
+      
+      <text x="860" y="75" text-anchor="middle" font-weight="600" fill="#fa709a">💾</text>
+      <text x="860" y="90" text-anchor="middle" font-weight="600">Auto Backup</text>
+      <text x="860" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">03:00 daily</text>
+      <text x="860" y="120" text-anchor="middle" fill="#fa709a" font-size="8">Keep 14 snapshots</text>
+    </g>
+  </svg>
+</div>
 
 ---
 
-## Configuration
+## 🧠 Insight Engine
 
-### Required
-
-| Variable | Description |
-|---|---|
-| `BOT_TOKEN` | From [@BotFather](https://t.me/BotFather) |
-
-### Strongly recommended
-
-| Variable | Default | Why it matters |
+| Insight | Trigger Condition | Action |
 |---|---|---|
-| `DATA_DIR` | `.` | **Must point at a mounted volume.** Without it, all data is lost on every redeploy |
-| `BOT_TZ` | `UTC` | IANA name, e.g. `Asia/Kuala_Lumpur`. Without it, "3pm" means 3pm UTC |
+| **⚖️ Balance** | 8 tasks in 14 days, one category > 60% | Suggests diversification |
+| **🔥 Burnout** | 4 energy ratings in 7 days, avg < 2.5 | Recommends rest / lighter load |
+| **👁️ Neglect** | Watched category silent 10+ days | Gentle nudge to revisit |
 
-The bot prints a warning at startup if `DATA_DIR` is unset.
+> **Note:** Insights stay silent during the first week on fresh installs — this is intentional. The bot learns your patterns before speaking up.
 
-### AI
+---
 
-| Variable | Default |
-|---|---|
-| `HF_TOKEN` | — (AI features report "not configured" without it) |
-| `AI_MODEL` | `meta-llama/Llama-3.1-8B-Instruct` |
-| `AI_BASE_URL` | `https://router.huggingface.co/v1/chat/completions` |
-| `AI_TIMEOUT` | `45` |
-
-The token needs **Make calls to Inference Providers** permission. Tokens created
-before Inference Providers existed will return 401 even though they are valid.
-
-Any OpenAI-compatible chat-completions endpoint works, so `AI_BASE_URL` can point
-elsewhere without code changes. To see what Hugging Face currently serves:
+## 🛠️ Local Development
 
 ```bash
-curl https://router.huggingface.co/v1/models
-```
+# 1. Clone & enter
+git clone https://github.com/printezy247/lifebalance-bot.git
+cd lifebalance-bot
 
-### Schedules
-
-| Variable | Default | Range |
-|---|---|---|
-| `QUIET_START` / `QUIET_END` | `22` / `7` | 0-23. Set equal to disable |
-| `BRIEFING_ENABLED` / `BRIEFING_HOUR` | `1` / `7` | |
-| `WINDDOWN_ENABLED` / `WINDDOWN_HOUR` | `1` / `21` | |
-| `DIGEST_ENABLED` / `DIGEST_DAY` / `DIGEST_HOUR` | `1` / `0` / `19` | Day 0 = Sunday |
-| `NUDGE_ENABLED` / `NUDGE_AFTER_MINUTES` | `1` / `30` | |
-| `BACKUP_ENABLED` / `BACKUP_HOUR` / `BACKUP_KEEP` | `1` / `3` / `14` | |
-| `FOCUS_DEFAULT` / `FOCUS_MAX` | `25` / `180` | minutes |
-
-Scheduling a briefing, wind-down or digest **inside** quiet hours would silently
-suppress it, so the bot warns you at startup if you do.
-
-### Insight thresholds
-
-| Variable | Default |
-|---|---|
-| `INSIGHT_COOLDOWN_DAYS` | `7` |
-| `BALANCE_WINDOW_DAYS` / `BALANCE_MIN_TASKS` / `BALANCE_THRESHOLD` | `14` / `8` / `60` |
-| `BURNOUT_WINDOW_DAYS` / `BURNOUT_MIN_RATINGS` / `BURNOUT_THRESHOLD` | `7` / `4` / `2.5` |
-| `NEGLECT_DAYS` / `NEGLECT_CATEGORIES` | `10` / `family,health` |
-
-Every numeric variable is clamped to a sane range and falls back to its default
-if unparseable, so a typo degrades rather than crashes.
-
-Per-user toggles set through `/settings` override the enabled/disabled defaults
-above. Thresholds are environment-only.
-
----
-
-## Deploying on Railway
-
-1. **New Project → Deploy from GitHub**, pick this repo. Railpack detects Python
-   and reads the `worker` process from the `Procfile`.
-
-2. **Attach a volume.** Service → Variables → **+ New Volume**, mount path:
-
-   ```
-   /data
-   ```
-
-   Do not mount at `/app` — that is where the build places your code, and a
-   volume there will shadow it.
-
-3. **Set variables:**
-
-   ```
-   BOT_TOKEN = <from @BotFather>
-   DATA_DIR  = /data
-   BOT_TZ    = Asia/Kuala_Lumpur
-   HF_TOKEN  = <optional, for AI features>
-   ```
-
-4. Deploy. A healthy startup looks like:
-
-   ```
-   [init] Backup directory ready: /data/backups
-   [init] Morning briefing at 07:00 Asia/Kuala_Lumpur
-   [init] Evening wind-down at 21:00 Asia/Kuala_Lumpur
-   [init] Backup at 03:00 Asia/Kuala_Lumpur, keeping 14
-   [init] Weekly digest scheduled for Sunday 19:00 Asia/Kuala_Lumpur
-   [init] Quiet hours default: 22:00-07:00 (reminders exempt)
-   [init] LifeBalance Bot running (tz=Asia/Kuala_Lumpur, data=/data/user_data.json)
-   ```
-
-   If that last line reads `data=./user_data.json`, `DATA_DIR` is not being
-   picked up and your data is still ephemeral.
-
-The bot uses long polling, so it needs no public URL or health check. It runs as
-a `worker`, not a `web` service.
-
----
-
-## Data and backups
-
-Everything lives in one JSON file at `DATA_DIR/user_data.json`, written
-atomically via a temp file and `os.replace` so an interrupted write cannot
-corrupt it.
-
-The daily backup job writes timestamped copies to `DATA_DIR/backups/` and prunes
-to the newest `BACKUP_KEEP`. The file is only kilobytes, so retention costs
-essentially nothing.
-
-To restore, stop the service, copy a snapshot over `user_data.json`, and restart:
-
-```bash
-cp /data/backups/user_data_20260904_030000.json /data/user_data.json
-```
-
-`user_data.json` and `backups/` are gitignored — they contain personal content
-and must never be committed.
-
----
-
-## Local development
-
-```bash
+# 2. Virtual environment
 python -m venv .venv
 .venv\Scripts\activate        # Windows
-source .venv/bin/activate     # macOS/Linux
+source .venv/bin/activate      # macOS/Linux
 
+# 3. Install deps
 pip install -r requirements.txt
-```
 
-Create a `.env` file (gitignored):
-
-```
-BOT_TOKEN=...
+# 4. Create .env (git-ignored)
+cat > .env << 'EOF'
+BOT_TOKEN=your_token_from_botfather
 BOT_TZ=Asia/Kuala_Lumpur
 DATA_DIR=./local-data
-HF_TOKEN=...
-```
+HF_TOKEN=your_hf_token_optional
+EOF
 
-Then:
-
-```bash
+# 5. Run
 python lifebalance_bot.py
 ```
 
-Only one instance may poll a given bot token at a time. Running locally while
-Railway is live will cause both to fight over updates — stop the Railway service
-or use a second bot token for development.
+> ⚠️ Only one instance may poll a given bot token. Stop Railway service or use a second token for local dev.
 
 ---
 
-## Notes for maintainers
+## 📦 Project Structure
 
-**Do not pin `httpx`, `httpcore` or `anyio` in `requirements.txt`.**
-`python-telegram-bot` pins its own compatible versions. Adding manual pins
-previously produced an unresolvable conflict (`httpcore<1.0.0` against
-`httpx 0.25.2`, which requires `httpcore==1.*`) and broke the build outright.
+```
+lifebalance-bot/
+├── lifebalance_bot.py      # Main entry point (long-polling worker)
+├── requirements.txt        # Pinned minimal deps
+├── Procfile                # Railway: worker: python lifebalance_bot.py
+├── .python-version         # Pinned Python 3.11
+├── .gitignore              # Ignores data/, backups/, .env, __pycache__
+├── LICENSE                 # MIT
+└── README.md               # You are here
+```
 
-**Python is pinned in `.python-version`.** Leaving it unpinned let the builder
-default drift to 3.13, which PTB 20.7 and APScheduler 3.10.4 predate.
-
-**`tzdata` is an explicit dependency** because `zoneinfo` has no timezone
-database on slim Linux images.
-
-**Jobs must not hold data across an await.** `load_data` and `save_data` are
-synchronous, so a read-modify-write with no await between is atomic on the event
-loop. Awaiting a send in the middle is not: a concurrent handler write in that
-window gets silently overwritten. Scheduled jobs therefore collect under
-`_data_lock`, send outside it, then re-load and mark delivery under the lock
-again. Follow that pattern for any new job.
-
-**`callback_data` is capped at 64 bytes.** Callbacks are namespaced —
-`t:` tasks, `nav:` navigation, `dash:` dashboards, `rate:` ratings, `rf:`
-reflection, `set:` settings, `roll:` rollover, `focus:` timer. Dispatch on the
-namespace; never assume a trailing integer.
-
-**All user text is HTML-escaped** before interpolation into messages. A task
-containing `&` or `<` will otherwise cause Telegram to reject the send.
-
-**PTB maps `run_daily(days=...)` 0-6 to Sunday-Saturday**, changed from
-Monday-Sunday in v20. Scheduled times must carry explicit `tzinfo` or they are
-treated as UTC.
+**Runtime files (git-ignored, created at runtime):**
+```
+data/
+├── user_data.json          # Single atomic JSON store
+└── backups/
+    ├── user_data_20260911_030000.json
+    └── ...
+```
 
 ---
 
-## Troubleshooting
+## 🏗️ Architecture Highlights
 
-| Symptom | Cause |
-|---|---|
-| Tasks vanish after deploy | `DATA_DIR` unset or no volume attached |
-| Reminders at the wrong hour | `BOT_TZ` unset, so times are UTC |
-| Briefing or digest never arrives | Scheduled inside quiet hours — check startup warnings — or toggled off in `/settings` |
-| `AI unavailable - the API token is missing or invalid` | `HF_TOKEN` lacks Inference Providers permission |
-| `AI unavailable - the account is out of inference credits` | Free tier exhausted; resets monthly |
-| `model '...' is not served` | Pick another from `/v1/models` and set `AI_MODEL` |
-| `Could not reach ...` | `AI_BASE_URL` host is wrong or unreachable |
-| Nudges silent late at night | Working as designed; quiet hours |
-| Insights never appear | Below threshold. They stay silent on purpose until there is enough data |
+<div align="center">
+  <svg width="800" height="180" viewBox="0 0 800 180" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="archGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#667eea"/>
+        <stop offset="50%" stop-color="#764ba2"/>
+        <stop offset="100%" stop-color="#f093fb"/>
+      </linearGradient>
+      <filter id="archGlow">
+        <feGaussianBlur stdDeviation="3" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    
+    <rect x="10" y="10" width="780" height="160" rx="16" fill="#0a0e1a" stroke="url(#archGrad)" stroke-width="1.5"/>
+    <text x="400" y="38" text-anchor="middle" fill="url(#archGrad)" font-family="Segoe UI" font-weight="800" font-size="16">🏗️ TECHNICAL ARCHITECTURE</text>
+    
+    <g font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#e2e8f0">
+      <!-- Row 1 -->
+      <text x="80" y="75" text-anchor="middle" font-weight="600" fill="#4facfe">📦</text>
+      <text x="80" y="90" text-anchor="middle" font-weight="600">Single Process</text>
+      <text x="80" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">Long-polling worker</text>
+      <text x="80" y="120" text-anchor="middle" fill="#4facfe" font-size="8">No webhook needed</text>
+      
+      <text x="240" y="75" text-anchor="middle" font-weight="600" fill="#f093fb">🧵</text>
+      <text x="240" y="90" text-anchor="middle" font-weight="600">Thread-Safe</text>
+      <text x="240" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">RLock + atomic writes</text>
+      <text x="240" y="120" text-anchor="middle" fill="#f093fb" font-size="8">temp file + os.replace</text>
+      
+      <text x="400" y="75" text-anchor="middle" font-weight="600" fill="#43e97b">⏰</text>
+      <text x="400" y="90" text-anchor="middle" font-weight="600">APScheduler</text>
+      <text x="400" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">Timezone-aware jobs</text>
+      <text x="400" y="120" text-anchor="middle" fill="#43e97b" font-size="8">Cron + interval triggers</text>
+      
+      <text x="560" y="75" text-anchor="middle" font-weight="600" fill="#fee140">🤖</text>
+      <text x="560" y="90" text-anchor="middle" font-weight="600">AI Layer</text>
+      <text x="560" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">OpenAI-compatible</text>
+      <text x="560" y="120" text-anchor="middle" fill="#fee140" font-size="8">Pluggable endpoint</text>
+      
+      <text x="720" y="75" text-anchor="middle" font-weight="600" fill="#fa709a">🔒</text>
+      <text x="720" y="90" text-anchor="middle" font-weight="600">Privacy First</text>
+      <text x="720" y="105" text-anchor="middle" fill="#94a3b8" font-size="9">Local JSON only</text>
+      <text x="720" y="120" text-anchor="middle" fill="#fa709a" font-size="8">No external DB</text>
+    </g>
+  </svg>
+</div>
 
 ---
 
-## License
+## 🐛 Troubleshooting
 
-See [LICENSE](LICENSE).
+| Symptom | Likely Cause | Fix |
+|---|---|---|
+| Tasks vanish after deploy | `DATA_DIR` unset / no volume | Attach volume at `/data`, set `DATA_DIR=/data` |
+| Reminders at wrong hour | `BOT_TZ` unset | Set IANA timezone (e.g. `Asia/Kuala_Lumpur`) |
+| Briefing/digest never arrives | Inside quiet hours or toggled off | Check `/settings` or adjust schedule |
+| `AI unavailable - token missing` | `HF_TOKEN` lacks Inference permission | Enable **Inference Providers** in HF settings |
+| `AI unavailable - out of credits` | Free tier exhausted | Resets monthly or add credits |
+| `model '...' not served` | Model unavailable | Change `AI_MODEL` |
+| Connection errors | `AI_BASE_URL` wrong | Verify endpoint URL |
+| Nudges silent at night | Working as designed | Quiet hours exempt reminders only |
+| Insights never appear | Below data thresholds | Wait for enough history |
+
+---
+
+## 📝 Maintainer Notes
+
+- **Don't pin** `httpx`, `httpcore`, `anyio` — PTB manages compatible versions
+- Python version pinned in `.python-version` — leave unpinned at your own risk
+- `tzdata` required (zoneinfo lacks tz DB on slim Linux images)
+- Jobs must not hold data across `await` — `load_data`/`save_data` are sync
+- Callback data limited to 64 bytes — use namespaces (`t:`, `nav:`, `dash:`)
+- **HTML-escape all user text** before insertion — otherwise Telegram rejects
+- PTB schedule mapping: Sunday-Saturday (v20+) — use explicit `tzinfo`
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repo
+2. Create a feature branch: `git checkout -b feat/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feat/amazing-feature`
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+  <svg width="400" height="60" viewBox="0 0 400 60" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="footGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#667eea">
+          <animate attributeName="stop-color" values="#667eea;#764ba2;#f093fb;#f5576c;#667eea" dur="8s" repeatCount="indefinite"/>
+        </stop>
+        <stop offset="100%" stop-color="#764ba2">
+          <animate attributeName="stop-color" values="#764ba2;#f093fb;#f5576c;#667eea;#764ba2" dur="8s" repeatCount="indefinite"/>
+        </stop>
+      </linearGradient>
+    </defs>
+    <text x="200" y="35" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" font-weight="800" font-size="20" fill="url(#footGrad)">printezy · lifebalance-bot</text>
+    <text x="200" y="52" text-anchor="middle" font-family="Segoe UI" font-size="10" fill="#64748b">Built for balance. Free forever. No subscriptions.</text>
+  </svg>
+  <br><br>
+  <sub>Educational & personal productivity tool. Not professional advice.</sub>
+</div>
